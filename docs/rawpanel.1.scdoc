@@ -17,7 +17,7 @@ area with standard struts.
 
 rawpanel is not a window manager and does not reconstruct rawm state from EWMH
 client lists. Focused-title presentation comes from rawm's authoritative
-`\_RAWM\_CLIENTS` inventory rather than direct client-property observation.
+*\_RAWM\_CLIENTS* inventory rather than direct client-property observation.
 
 # OPTIONS
 
