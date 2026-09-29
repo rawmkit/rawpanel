@@ -1,0 +1,54 @@
+RAWPANEL.CONF(5)
+
+# NAME
+
+rawpanel.conf - rawpanel configuration
+
+# DESCRIPTION
+
+The file uses libconfig syntax. It contains only panel-local presentation,
+status, tray, and pointer-interaction policy.
+
+# PANEL
+
+*panel* is a group. Supported members are *font*, *position* (`top` or
+`bottom`), *height*, *padding*, *item\_spacing*, *section\_spacing*,
+*cell\_margin*, *indicator\_size*, *tags* (`occupied` or `all`), and *colors*.
+
+*colors* contains the groups *normal*, *selected*, *floating*, *urgent*, and
+*error*. Each color group accepts *border*, *foreground*, and *background*.
+
+# SYSTRAY
+
+*systray* accepts *enabled*, *spacing*, and *icon\_size*.
+
+# STATUS
+
+*status* accepts *enabled*, *separator*, and *sources*. Sources are named and
+use the native providers `alsa`, `battery`, `clock`, `cpu`, `exec`,
+`filesystem`, `memory`, and `network`.
+
+# BUTTONS
+
+*buttons* is a list of groups with *target*, *button*, *action*, and optional
+*modifiers*. Targets are `tag\_bar`, `layout`, `title`, and `status`.
+
+Window-manager actions use rawm's published command membrane. Native volume
+actions are `volume\_up`, `volume\_down`, and `volume\_mute`. `exec` requires an
+*argv* vector and is deliberately local to the clicked panel surface.
+
+Status bindings may add *id*. Tag actions take the tag under the pointer unless
+an explicit *tag* is supplied. Directional actions may use *number*. Layout
+actions may use *layout*.
+
+# FILES
+
+_$XDG\_CONFIG\_HOME/rawpanel/rawpanel.conf_
+
+_~/.config/rawpanel/rawpanel.conf_
+
+_/etc/rawpanel/rawpanel.conf_
+
+# SEE ALSO
+
+*rawpanel*(1), *rawm*(1)
