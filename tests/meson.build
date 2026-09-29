@@ -37,3 +37,17 @@ test('config', find_program('config.sh'),
 fake_rawm = executable('fake-rawm', 'fake-rawm.c', dependencies: [x11_dep])
 panel_probe = executable('panel-probe', 'panel-probe.c', dependencies: [x11_dep])
 test('panel', find_program('panel.sh'), args: [rawpanel, fake_rawm, panel_probe], timeout: 15)
+
+rawm_protocol_test = executable(
+  'rawm-protocol-test',
+  'rawm-protocol-test.c',
+  '../src/rawm.c',
+  include_directories: include_directories('../src'),
+  dependencies: [x11_dep],
+)
+test(
+  'rawm-protocol',
+  find_program('rawm-protocol.sh'),
+  args: [rawm_protocol_test],
+  timeout: 15,
+)

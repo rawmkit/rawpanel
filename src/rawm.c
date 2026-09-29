@@ -125,7 +125,7 @@ static int get_cardinal(Display *dpy, Window win, Atom atom, unsigned long *valu
   int rc;
   rc = XGetWindowProperty(dpy, win, atom, 0, 1, False, XA_CARDINAL,
                           &type, &format, &nitems, &after, &data);
-  if (rc != Success || type != XA_CARDINAL || format != 32 || nitems != 1) {
+  if (rc != Success || type != XA_CARDINAL || format != 32 || nitems != 1 || after != 0) {
     if (data) XFree(data);
     return -1;
   }
@@ -191,6 +191,91 @@ static int layout_id(const char *name)
   return -1;
 }
 
+static int
+split_fields(char *line, char **fields, size_t expected)
+{
+  size_t count = 0;
+  char *p;
+
+  if (!line || !fields || !expected)
+    return -1;
+  fields[count++] = line;
+  for (p = line; *p; ++p) {
+    if (*p != '\t')
+      continue;
+    *p = '\0';
+    if (count >= expected)
+      return -1;
+    fields[count++] = p + 1;
+  }
+  return count == expected ? 0 : -1;
+}
+
+static int
+parse_ulong_field(const char *text, int base, unsigned long max,
+                  unsigned long *value)
+{
+  char *end = NULL;
+  unsigned long parsed;
+
+  if (!text || !*text || text[0] == '-' || text[0] == '+')
+    return -1;
+  errno = 0;
+  parsed = strtoul(text, &end, base);
+  if (errno || !end || end == text || *end || parsed > max)
+    return -1;
+  *value = parsed;
+  return 0;
+}
+
+static int
+parse_long_field(const char *text, long min, long max, long *value)
+{
+  char *end = NULL;
+  long parsed;
+
+  if (!text || !*text || text[0] == '+')
+    return -1;
+  errno = 0;
+  parsed = strtol(text, &end, 10);
+  if (errno || !end || end == text || *end || parsed < min || parsed > max)
+    return -1;
+  *value = parsed;
+  return 0;
+}
+
+static int
+parse_mask_field(const char *text, uint32_t *value)
+{
+  uint32_t parsed = 0;
+  size_t i;
+
+  if (!text || strlen(text) != 8u)
+    return -1;
+  for (i = 0; i < 8u; ++i) {
+    int digit = hexval((unsigned char)text[i]);
+
+    if (digit < 0)
+      return -1;
+    parsed = (parsed << 4) | (uint32_t)digit;
+  }
+  *value = parsed;
+  return 0;
+}
+
+static int
+parse_xid_field(const char *text, bool allow_zero, Window *value)
+{
+  unsigned long parsed;
+
+  if (!text || text[0] != '0' || text[1] != 'x' || !text[2] ||
+      parse_ulong_field(text + 2, 16, UINT32_MAX, &parsed) < 0 ||
+      (!allow_zero && parsed == 0))
+    return -1;
+  *value = (Window)parsed;
+  return 0;
+}
+
 static int escaped_text_valid(const char *text)
 {
   size_t i;
@@ -242,6 +327,10 @@ int rawpanel_rawm_read_state(RawpanelRawm *rawm, RawpanelRawmState *state, FILE 
     return -1;
   if (read_property(rawm, rawm->state, &property, &length) < 0)
     return -1;
+  if (length && memchr(property, '\0', length)) {
+    XFree(property);
+    return -1;
+  }
   text = dupbytes((const char *)property, (size_t)length);
   XFree(property);
   if (!text)
@@ -254,24 +343,18 @@ int rawpanel_rawm_read_state(RawpanelRawm *rawm, RawpanelRawmState *state, FILE 
       continue;
     }
     if (!strncmp(line, "tag-count\t", 10)) {
-      char *end = NULL;
       unsigned long v;
-      if (tag_count_seen) goto invalid;
-      errno = 0;
-      v = strtoul(line + 10, &end, 10);
-      if (errno || !end || end == line + 10 || *end ||
-          v == 0 || v > RAWPANEL_MAX_TAGS) goto invalid;
+      if (tag_count_seen ||
+          parse_ulong_field(line + 10, 10, RAWPANEL_MAX_TAGS, &v) < 0 || v == 0)
+        goto invalid;
       parsed.tag_count = (unsigned int)v;
       tag_count_seen = true;
       continue;
     }
     if (!strncmp(line, "selected-monitor\t", 17)) {
-      char *end = NULL;
       long v;
-      if (selected_monitor_seen) goto invalid;
-      errno = 0;
-      v = strtol(line + 17, &end, 10);
-      if (errno || !end || end == line + 17 || *end || v < -1 || v > INT_MAX)
+      if (selected_monitor_seen ||
+          parse_long_field(line + 17, -1, INT_MAX, &v) < 0)
         goto invalid;
       parsed.selected_monitor = (int)v;
       selected_monitor_seen = true;
@@ -279,75 +362,81 @@ int rawpanel_rawm_read_state(RawpanelRawm *rawm, RawpanelRawmState *state, FILE 
     }
     if (!strncmp(line, "monitor\t", 8)) {
       RawpanelRawmMonitor m = {0};
-      char layout[64];
-      unsigned long focused;
-      unsigned int viewed, occupied, urgent;
-      int selected;
-      int consumed = 0;
       RawpanelRawmMonitor *monitors;
+      char *fields[14];
+      long number, x, y, width, height, nmaster;
+      unsigned long selected;
+      char *end = NULL;
+
       if (!tag_count_seen || parsed.monitor_count >= RAWPANEL_MAX_MONITORS ||
-          sscanf(line + 8,
-                 "%d\t%d\t%d\t%d\t%d\t%d\t%x\t%x\t%x\t%63[^\t]\t%lx\t%d\t%lf%n",
-                 &m.number, &selected, &m.x, &m.y, &m.width, &m.height,
-                 &viewed, &occupied, &urgent, layout, &focused, &m.nmaster,
-                 &m.mfact, &consumed) != 13 || line[8 + consumed] != '\0' ||
-          m.number < 0 || monitor_by_number(&parsed, m.number) ||
-          (selected != 0 && selected != 1) || m.width <= 0 || m.height <= 0 ||
-          m.nmaster < 0 || !isfinite(m.mfact) || m.mfact < 0.1 || m.mfact > 0.9 ||
-          layout_id(layout) < 0)
+          split_fields(line, fields, 14u) < 0 || strcmp(fields[0], "monitor") ||
+          parse_long_field(fields[1], 0, INT_MAX, &number) < 0 ||
+          parse_ulong_field(fields[2], 10, 1, &selected) < 0 ||
+          parse_long_field(fields[3], INT_MIN, INT_MAX, &x) < 0 ||
+          parse_long_field(fields[4], INT_MIN, INT_MAX, &y) < 0 ||
+          parse_long_field(fields[5], 1, INT_MAX, &width) < 0 ||
+          parse_long_field(fields[6], 1, INT_MAX, &height) < 0 ||
+          parse_mask_field(fields[7], &m.viewed) < 0 ||
+          parse_mask_field(fields[8], &m.occupied) < 0 ||
+          parse_mask_field(fields[9], &m.urgent) < 0 ||
+          layout_id(fields[10]) < 0 ||
+          parse_xid_field(fields[11], true, &m.focused) < 0 ||
+          parse_long_field(fields[12], 0, INT_MAX, &nmaster) < 0)
+        goto invalid;
+      errno = 0;
+      m.mfact = strtod(fields[13], &end);
+      if (errno || !end || end == fields[13] || *end || !isfinite(m.mfact) ||
+          m.mfact < 0.1 || m.mfact > 0.9)
+        goto invalid;
+      m.number = (int)number;
+      if (monitor_by_number(&parsed, m.number))
         goto invalid;
       m.selected = selected != 0;
-      m.viewed = viewed;
-      m.occupied = occupied;
-      m.urgent = urgent;
-      m.focused = (Window)focused;
-      m.layout = dupbytes(layout, strlen(layout));
+      m.x = (int)x;
+      m.y = (int)y;
+      m.width = (int)width;
+      m.height = (int)height;
+      m.nmaster = (int)nmaster;
+      m.layout = dupbytes(fields[10], strlen(fields[10]));
       m.visible_count = UINT_MAX;
       if (!m.layout) goto oom;
-      monitors = realloc(parsed.monitors, (parsed.monitor_count + 1u) * sizeof(*monitors));
+      monitors = realloc(parsed.monitors,
+                         (parsed.monitor_count + 1u) * sizeof(*monitors));
       if (!monitors) { free(m.layout); goto oom; }
       parsed.monitors = monitors;
       parsed.monitors[parsed.monitor_count++] = m;
       continue;
     }
     if (!strncmp(line, "stack\t", 6)) {
-      int mon = -1;
-      unsigned int focused_index = 0, visible_count = 0;
-      int consumed = 0;
+      char *fields[4];
+      unsigned long mon_value, focused_value, visible_value;
       RawpanelRawmMonitor *m;
-      if (sscanf(line + 6, "%d\t%u\t%u%n", &mon, &focused_index,
-                 &visible_count, &consumed) != 3 || line[6 + consumed] != '\0' ||
-          !(m = monitor_by_number(&parsed, mon)) ||
-          m->visible_count != UINT_MAX || focused_index > visible_count)
+
+      if (split_fields(line, fields, 4u) < 0 || strcmp(fields[0], "stack") ||
+          parse_ulong_field(fields[1], 10, INT_MAX, &mon_value) < 0 ||
+          parse_ulong_field(fields[2], 10, UINT_MAX, &focused_value) < 0 ||
+          parse_ulong_field(fields[3], 10, UINT_MAX, &visible_value) < 0 ||
+          !(m = monitor_by_number(&parsed, (int)mon_value)) ||
+          m->visible_count != UINT_MAX || focused_value > visible_value)
         goto invalid;
-      m->focused_index = focused_index;
-      m->visible_count = visible_count;
+      m->focused_index = (unsigned int)focused_value;
+      m->visible_count = (unsigned int)visible_value;
       continue;
     }
     if (!strncmp(line, "tag\t", 4)) {
-      int mon = -1;
-      unsigned int index = 0;
-      char *p = line + 4, *q, *r;
+      char *fields[4];
+      unsigned long mon_value, index_value;
       RawpanelRawmMonitor *m;
-      char *end = NULL;
-      long mon_value;
-      unsigned long index_value;
-      q = strchr(p, '\t'); if (!q) goto invalid; *q++ = '\0';
-      r = strchr(q, '\t'); if (!r || strchr(r + 1, '\t')) goto invalid; *r++ = '\0';
-      errno = 0;
-      mon_value = strtol(p, &end, 10);
-      if (errno || !end || end == p || *end || mon_value < 0 || mon_value > INT_MAX)
-        goto invalid;
-      mon = (int)mon_value;
-      errno = 0;
-      index_value = strtoul(q, &end, 10);
-      if (errno || !end || end == q || *end || index_value == 0 ||
-          index_value > parsed.tag_count || !(m = monitor_by_number(&parsed, mon)) ||
+
+      if (split_fields(line, fields, 4u) < 0 || strcmp(fields[0], "tag") ||
+          parse_ulong_field(fields[1], 10, INT_MAX, &mon_value) < 0 ||
+          parse_ulong_field(fields[2], 10, parsed.tag_count, &index_value) < 0 ||
+          index_value == 0 ||
+          !(m = monitor_by_number(&parsed, (int)mon_value)) ||
           m->tags[index_value - 1u])
         goto invalid;
-      index = (unsigned int)index_value;
-      m->tags[index - 1u] = unescape(r);
-      if (!m->tags[index - 1u]) goto invalid;
+      m->tags[index_value - 1u] = unescape(fields[3]);
+      if (!m->tags[index_value - 1u]) goto invalid;
       continue;
     }
     goto invalid;
@@ -408,7 +497,7 @@ read_client_titles(RawpanelRawm *rawm, RawpanelRawmState *state, FILE *err)
 
   if (read_property(rawm, rawm->clients, &property, &length) < 0)
     goto invalid;
-  if (memchr(property, '\0', length)) {
+  if (length && memchr(property, '\0', length)) {
     XFree(property);
     goto invalid;
   }
@@ -422,7 +511,6 @@ read_client_titles(RawpanelRawm *rawm, RawpanelRawmState *state, FILE *err)
     char *fields[8];
     size_t count = 0;
     char *p = line;
-    char *end = NULL;
     unsigned long xid_value, monitor_value, tags_value;
     char *class_name = NULL, *title = NULL;
     size_t i;
@@ -448,19 +536,16 @@ read_client_titles(RawpanelRawm *rawm, RawpanelRawmState *state, FILE *err)
         !escaped_text_valid(fields[6]) || !escaped_text_valid(fields[7]))
       goto invalid;
 
-    errno = 0;
-    xid_value = strtoul(fields[1], &end, 0);
-    if (errno || !end || end == fields[1] || *end || xid_value == 0)
-      goto invalid;
-    errno = 0;
-    monitor_value = strtoul(fields[2], &end, 10);
-    if (errno || !end || end == fields[2] || *end || monitor_value > INT_MAX)
-      goto invalid;
-    if (strlen(fields[3]) != 8u) goto invalid;
-    errno = 0;
-    tags_value = strtoul(fields[3], &end, 16);
-    if (errno || !end || end == fields[3] || *end || tags_value > UINT32_MAX)
-      goto invalid;
+    {
+      Window xid;
+      uint32_t tags;
+      if (parse_xid_field(fields[1], false, &xid) < 0 ||
+          parse_ulong_field(fields[2], 10, INT_MAX, &monitor_value) < 0 ||
+          parse_mask_field(fields[3], &tags) < 0)
+        goto invalid;
+      xid_value = (unsigned long)xid;
+      tags_value = (unsigned long)tags;
+    }
     (void)monitor_value;
     (void)tags_value;
 
