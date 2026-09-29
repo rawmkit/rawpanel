@@ -96,6 +96,7 @@ static Window control_owner;
 static Atom control_selection, control_version_atom, control_supported_atom;
 static Atom control_command_atom;
 static Atom control_commands[4];
+static bool control_volume_available;
 
 static void on_signal(int signo) { (void)signo; terminate_requested = 1; }
 
@@ -709,6 +710,25 @@ static void set_panel_visible(bool visible)
   XFlush(dpy);
 }
 
+static void control_publish_capabilities(bool volume_control)
+{
+  Atom supported[4];
+  int count = 0;
+
+  if (!control_owner)
+    return;
+  control_volume_available = volume_control;
+  supported[count++] = control_commands[0];
+  if (volume_control) {
+    supported[count++] = control_commands[1];
+    supported[count++] = control_commands[2];
+    supported[count++] = control_commands[3];
+  }
+  XChangeProperty(dpy, control_owner, control_supported_atom, XA_ATOM, 32,
+                  PropModeReplace, (unsigned char *)supported, count);
+  XFlush(dpy);
+}
+
 static int control_init(void)
 {
   char name[64];
@@ -740,9 +760,7 @@ static int control_init(void)
     return -1;
   XChangeProperty(dpy, control_owner, control_version_atom, XA_CARDINAL, 32,
                   PropModeReplace, (unsigned char *)&version, 1);
-  XChangeProperty(dpy, control_owner, control_supported_atom, XA_ATOM, 32,
-                  PropModeReplace, (unsigned char *)control_commands, 4);
-  XFlush(dpy);
+  control_publish_capabilities(false);
   return 0;
 }
 
@@ -757,11 +775,11 @@ static bool handle_control_message(XClientMessageEvent *ev)
   opcode = (Atom)(unsigned long)ev->data.l[1];
   if (opcode == control_commands[0])
     set_panel_visible(!panel_visible);
-  else if (opcode == control_commands[1])
+  else if (control_volume_available && opcode == control_commands[1])
     (void)rawpanel_status_worker_control(&statusworker, RAWPANEL_STATUS_CONTROL_VOLUME_UP, stderr);
-  else if (opcode == control_commands[2])
+  else if (control_volume_available && opcode == control_commands[2])
     (void)rawpanel_status_worker_control(&statusworker, RAWPANEL_STATUS_CONTROL_VOLUME_DOWN, stderr);
-  else if (opcode == control_commands[3])
+  else if (control_volume_available && opcode == control_commands[3])
     (void)rawpanel_status_worker_control(&statusworker, RAWPANEL_STATUS_CONTROL_VOLUME_MUTE, stderr);
   return true;
 }
@@ -878,6 +896,8 @@ int main(int argc, char **argv)
     rawpanel_status_worker_init(&statusworker);
     if (rawpanel_status_worker_start(&statusworker, &cfg.status, stderr) < 0)
       fputs("rawpanel: status worker unavailable; continuing without status\n", stderr);
+    else if (rawpanel_status_config_has_volume_control(&cfg.status))
+      control_publish_capabilities(true);
   }
 
   while (!terminate_requested) {
@@ -892,7 +912,11 @@ int main(int argc, char **argv)
       RawpanelStatusData next = {0};
       int got = rawpanel_status_worker_receive(&statusworker, &next, stderr);
       if (got > 0) { rawpanel_status_data_destroy(&statusdata); statusdata = next; draw_all(); }
-      else if (got < 0) { rawpanel_status_worker_stop(&statusworker, stderr); draw_all(); }
+      else if (got < 0) {
+        rawpanel_status_worker_stop(&statusworker, stderr);
+        control_publish_capabilities(false);
+        draw_all();
+      }
     }
   }
   cleanup();

@@ -57,6 +57,11 @@ wait_dock() {
 line=$(wait_dock 1)
 set -- $line
 [ "$2 $3 $4 $5 $6 $7 $8" = "0 0 800 24 1 24 0" ] || fail "unexpected dock: $line"
+"$probe" supported _RAWPANEL_CMD_TOGGLE_VISIBILITY ||
+  fail "toggle-visibility capability was not advertised"
+if "$probe" supported _RAWPANEL_CMD_VOLUME_MUTE; then
+  fail "volume capability was advertised without an active status worker"
+fi
 "$probe" toggle
 wait_dock 0 >/dev/null
 "$probe" toggle

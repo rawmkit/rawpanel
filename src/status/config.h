@@ -50,5 +50,6 @@ int rawpanel_status_config_parse_sources(RawpanelStatusConfig *cfg,
                                      const config_setting_t *group, FILE *err);
 int rawpanel_status_config_validate(const RawpanelStatusConfig *cfg, FILE *err);
 const char *rawpanel_status_provider_name(RawpanelStatusProvider provider);
+bool rawpanel_status_config_has_volume_control(const RawpanelStatusConfig *cfg);
 
 #endif

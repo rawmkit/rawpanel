@@ -52,6 +52,35 @@ static int print_dock(Display *dpy, Window root)
   return 0;
 }
 
+
+static int supported(Display *dpy, const char *name)
+{
+  int screen = DefaultScreen(dpy);
+  char selection[64];
+  Atom sel, prop, wanted, actual = None;
+  Window owner;
+  int format = 0;
+  unsigned long n = 0, after = 0, i;
+  unsigned char *data = NULL;
+  int found = 0;
+
+  snprintf(selection, sizeof(selection), "_RAWPANEL_CONTROL_S%d", screen);
+  sel = XInternAtom(dpy, selection, True);
+  prop = XInternAtom(dpy, "_RAWPANEL_SUPPORTED_COMMANDS", True);
+  wanted = XInternAtom(dpy, name, True);
+  if (!sel || !prop || !wanted || !(owner = XGetSelectionOwner(dpy, sel)))
+    return 1;
+  if (XGetWindowProperty(dpy, owner, prop, 0, 64, False, XA_ATOM,
+                         &actual, &format, &n, &after, &data) == Success &&
+      actual == XA_ATOM && format == 32 && after == 0) {
+    Atom *atoms = (Atom *)data;
+    for (i = 0; i < n; ++i)
+      if (atoms[i] == wanted) { found = 1; break; }
+  }
+  if (data) XFree(data);
+  return found ? 0 : 1;
+}
+
 static int toggle(Display *dpy)
 {
   int screen = DefaultScreen(dpy); char name[64];
@@ -74,9 +103,13 @@ int main(int argc, char **argv)
 {
   Display *dpy = XOpenDisplay(NULL); int rc;
   if (!dpy) return 77;
-  if (argc != 2) return 2;
-  if (!strcmp(argv[1], "dock")) rc = print_dock(dpy, RootWindow(dpy, DefaultScreen(dpy)));
-  else if (!strcmp(argv[1], "toggle")) rc = toggle(dpy);
-  else rc = 2;
+  if (argc == 2 && !strcmp(argv[1], "dock"))
+    rc = print_dock(dpy, RootWindow(dpy, DefaultScreen(dpy)));
+  else if (argc == 2 && !strcmp(argv[1], "toggle"))
+    rc = toggle(dpy);
+  else if (argc == 3 && !strcmp(argv[1], "supported"))
+    rc = supported(dpy, argv[2]);
+  else
+    rc = 2;
   XCloseDisplay(dpy); return rc;
 }

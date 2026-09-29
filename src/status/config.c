@@ -101,6 +101,23 @@ rawpanel_status_provider_name(RawpanelStatusProvider provider)
   return NULL;
 }
 
+bool
+rawpanel_status_config_has_volume_control(const RawpanelStatusConfig *cfg)
+{
+  size_t i;
+  size_t count = 0;
+
+  if (!cfg)
+    return false;
+  for (i = 0; i < cfg->source_count; ++i) {
+    const RawpanelStatusSourceConfig *source = &cfg->sources[i];
+
+    if (source->enabled && source->provider == RAWPANEL_STATUS_PROVIDER_ALSA)
+      ++count;
+  }
+  return count == 1u;
+}
+
 static int
 parse_provider(const char *name, RawpanelStatusProvider *provider)
 {

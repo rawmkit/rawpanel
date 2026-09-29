@@ -27,10 +27,12 @@ or session process supervision.
 
 ## Control membrane
 
-For future input routers, rawpanel owns `_RAWPANEL_CONTROL_Sn` while alive and
-accepts version-1 commands for visibility and native volume control. Selection
-ownership is the liveness boundary; no socket, PID file, or stale root property
-is used.
+For independent input routers, rawpanel owns `_RAWPANEL_CONTROL_Sn` while alive
+and publishes `_RAWPANEL_SUPPORTED_COMMANDS`. Visibility is always advertised.
+Native volume commands are advertised only while a live status worker has one
+unambiguous enabled ALSA source; rawpanel withdraws them if that worker is lost.
+Selection ownership is the liveness boundary; no socket, PID file, or stale root
+property is used.
 
 ## Configuration
 

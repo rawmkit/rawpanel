@@ -40,8 +40,10 @@ client lists. Focused-title presentation comes from rawm's authoritative
 
 While running, rawpanel owns the per-screen selection
 *\_RAWPANEL\_CONTROL\_Sn*. The selection owner advertises version and supported
-commands. This boundary is intended for independent input routers; selection
-loss is authoritative process loss.
+commands. Visibility control is always advertised. Native volume commands are
+advertised only while the status worker has one enabled, unambiguous ALSA
+source; they are withdrawn if that worker is lost. This boundary is intended for
+independent input routers; selection loss is authoritative process loss.
 
 # SEE ALSO
 
