@@ -1,6 +1,7 @@
 #include "status-alsa-fake.h"
 
 #include <alsa/asoundlib.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct _snd_mixer {
@@ -107,6 +108,19 @@ size_t
 snd_mixer_selem_id_sizeof(void)
 {
   return sizeof(struct _snd_mixer_selem_id);
+}
+
+int
+snd_mixer_selem_id_malloc(snd_mixer_selem_id_t **id)
+{
+  *id = calloc(1, sizeof(**id));
+  return *id ? 0 : -1;
+}
+
+void
+snd_mixer_selem_id_free(snd_mixer_selem_id_t *id)
+{
+  free(id);
 }
 
 void

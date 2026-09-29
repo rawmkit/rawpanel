@@ -78,12 +78,16 @@ find_playback_element(RawpanelStatusAlsa *state,
                       const RawpanelStatusSourceConfig *config, FILE *err)
 {
   snd_mixer_elem_t *element;
-  snd_mixer_selem_id_t *id;
+  snd_mixer_selem_id_t *id = NULL;
 
-  snd_mixer_selem_id_alloca(&id);
+  if (snd_mixer_selem_id_malloc(&id) < 0) {
+    fputs("rawpanel: status worker: out of memory\n", err);
+    return NULL;
+  }
   snd_mixer_selem_id_set_index(id, 0);
   snd_mixer_selem_id_set_name(id, config->control);
   element = snd_mixer_find_selem(state->mixer, id);
+  snd_mixer_selem_id_free(id);
   if (!element || !snd_mixer_selem_has_playback_volume(element)) {
     fprintf(err,
             "rawpanel: status worker: ALSA control '%s' on '%s' has no playback volume\n",
