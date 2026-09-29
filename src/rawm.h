@@ -22,6 +22,7 @@ typedef struct {
   double mfact;
   unsigned int focused_index;
   unsigned int visible_count;
+  char *title;
   char *tags[RAWPANEL_MAX_TAGS];
 } RawpanelRawmMonitor;
 
@@ -42,6 +43,7 @@ typedef struct {
   Atom version;
   Atom supported;
   Atom state;
+  Atom clients;
   Atom command;
   Atom command_text;
 } RawpanelRawm;

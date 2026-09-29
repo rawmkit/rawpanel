@@ -8,7 +8,9 @@ membrane. `rawpanel` consumes that state, presents tags/layout/title/status,
 owns the XEmbed system-tray selection, and reserves screen work area through
 standard EWMH dock struts.
 
-`rawpanel` never reconstructs rawm tag/layout truth by walking windows.
+`rawpanel` never reconstructs rawm tag/layout truth by walking windows. Focused
+client titles are consumed from rawm's `_RAWM_CLIENTS` inventory rather than
+observed independently from client window properties.
 
 ## Authority
 

@@ -91,7 +91,6 @@ static RawpanelStatusWorker statusworker = {.fd = -1, .pid = -1};
 static Panel *panels;
 static size_t panel_count;
 static Tray tray;
-static Window observed_title;
 static bool panel_visible = true;
 static Window control_owner;
 static Atom control_selection, control_version_atom, control_supported_atom;
@@ -180,31 +179,6 @@ static RawpanelRawmMonitor *state_monitor(int number)
   for (i = 0; i < wmstate.monitor_count; ++i)
     if (wmstate.monitors[i].number == number) return &wmstate.monitors[i];
   return NULL;
-}
-
-static char *window_title(Window win)
-{
-  Atom type = None;
-  int format = 0;
-  unsigned long nitems = 0, after = 0;
-  unsigned char *data = NULL;
-  char *result = NULL;
-  if (!win) return strdup("");
-  if (XGetWindowProperty(dpy, win, net_wm_name, 0, 4096, False, utf8,
-                         &type, &format, &nitems, &after, &data) == Success &&
-      type == utf8 && format == 8 && after == 0 && data) {
-    result = strndup((const char *)data, nitems);
-    XFree(data);
-    if (result) return result;
-  } else if (data) XFree(data);
-  {
-    char *name = NULL;
-    if (XFetchName(dpy, win, &name) && name) {
-      result = strdup(name);
-      XFree(name);
-    }
-  }
-  return result ? result : strdup("");
 }
 
 static int layout_label(char *buf, size_t cap, const RawpanelRawmMonitor *m)
@@ -323,8 +297,8 @@ static void draw_panel(Panel *p)
 
   if (title_right > x) {
     int w = title_right - x;
-    title = window_title(m->focused);
-    draw_text(p, x, w, title ? title : "", m->selected ? RAWPANEL_SCHEME_NORMAL : RAWPANEL_SCHEME_NORMAL, false);
+    title = m->title ? strdup(m->title) : strdup("");
+    draw_text(p, x, w, title ? title : "", RAWPANEL_SCHEME_NORMAL, false);
     if (m->selected && m->focused) indicator(p, x + w/2 - (w > 12 ? 6 : 0), w > 12 ? 12 : w, RAWPANEL_SCHEME_SELECTED);
     add_hit(p, x, w, RAWPANEL_TARGET_TITLE, 0, NULL);
     free(title);
@@ -674,23 +648,12 @@ static void handle_button(XButtonEvent *ev)
   }
 }
 
-static void observe_focused_title(void)
-{
-  RawpanelRawmMonitor *m = state_monitor(wmstate.selected_monitor);
-  Window next = m ? m->focused : None;
-  if (observed_title == next) return;
-  if (observed_title) XSelectInput(dpy, observed_title, NoEventMask);
-  observed_title = next;
-  if (observed_title) XSelectInput(dpy, observed_title, PropertyChangeMask);
-}
-
 static void update_wm_state(void)
 {
   RawpanelRawmState next = {0};
   if (rawpanel_rawm_read_state(&rawm, &next, stderr) < 0) return;
   rawpanel_rawm_state_destroy(&wmstate);
   wmstate = next;
-  observe_focused_title();
   reconcile_panels();
   tray_arrange();
 }
@@ -706,10 +669,10 @@ static void handle_xevent(XEvent *e)
   }
   if (e->type == ButtonPress) { handle_button(&e->xbutton); return; }
   if (e->type == PropertyNotify) {
-    if (e->xproperty.window == rawm.owner && e->xproperty.atom == rawm.state) {
+    if (e->xproperty.window == rawm.owner &&
+        (e->xproperty.atom == rawm.state || e->xproperty.atom == rawm.clients)) {
       update_wm_state(); return;
     }
-    if (e->xproperty.window == observed_title) { draw_all(); return; }
   }
   if (e->type == DestroyNotify) {
     if (e->xdestroywindow.window == rawm.owner) { terminate_requested = 1; return; }
