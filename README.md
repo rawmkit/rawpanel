@@ -23,7 +23,9 @@ observed independently from client window properties.
 - panel-local pointer interaction policy.
 
 It does not own window placement, tags, layouts, focus, global keyboard grabs,
-or session process supervision.
+or session process supervision. Authoritative rawm state refreshes may redraw or
+resize an already mapped panel, but they do not reassert its root stacking order;
+fullscreen/managed stacking remains window-manager authority.
 
 The tray reserves panel width only for XEmbed clients whose `XEMBED_MAPPED` flag is set. An enabled but empty tray therefore has no visible blank cell.
 Embedded windows are kept in the X save-set so an abrupt panel disconnect cannot destroy client-owned tray windows; races with clients that withdraw or destroy an icon are contained at the X11 peer boundary.

@@ -621,8 +621,7 @@ static void reconcile_panels(void)
           panel_surface_recreate(p);
       }
       set_dock_properties(p, m);
-      if (panel_visible)
-        XMapRaised(dpy, p->win);
+      /* State refresh is presentation reconciliation, not stacking authority. */
     }
   }
   draw_all();

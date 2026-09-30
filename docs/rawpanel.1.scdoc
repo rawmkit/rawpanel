@@ -19,6 +19,8 @@ The tray follows the XEmbed mapped flag; when no mapped tray icon is present it 
 rawpanel is not a window manager and does not reconstruct rawm state from EWMH
 client lists. Focused-title presentation comes from rawm's authoritative
 *\_RAWM\_CLIENTS* inventory rather than direct client-property observation.
+Refreshing that state may redraw or resize an already mapped dock, but does not
+raise it; managed/fullscreen stacking remains rawm authority.
 
 # OPTIONS
 

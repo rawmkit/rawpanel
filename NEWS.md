@@ -1,6 +1,7 @@
 # NEWS
 
 ## 0.1.0
+- Stop passive rawm state reconciliation from raising an already mapped panel across fullscreen or other higher surfaces; state refresh now preserves existing root stacking.
 - Preserve peer-owned XEmbed windows across abrupt panel loss with the X save-set, and contain disappearing-client X errors instead of terminating the panel.
 - Clip text rendering to each allocated panel cell so long window titles cannot draw across status or tray surfaces.
 - Center status separators between adjacent cells instead of applying cell padding to the separator glyph.
