@@ -1,6 +1,7 @@
 # NEWS
 
 ## 0.1.0
+- Clip text rendering to each allocated panel cell so long window titles cannot draw across status or tray surfaces.
 - Center status separators between adjacent cells instead of applying cell padding to the separator glyph.
 - Complete the XEmbed tray lifecycle: publish the tray visual, embed unmapped clients, track `_XEMBED_INFO` mapped state, and preserve icons across panel topology recreation.
 - Consume rawm state version 2, including the producer-owned work-area rectangle, while retaining full-monitor geometry for panel placement.

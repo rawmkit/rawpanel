@@ -158,7 +158,18 @@ static int draw_text(Panel *p, int x, int width, const char *text,
   if (cell) fill(p->pixmap, x, 0, width, p->h, scheme);
   if (inner < 0) inner = 0;
   if (tw < inner) tx = x + (width - tw) / 2;
-  draw_text_at(p, tx, text, scheme);
+  {
+    XRectangle clip = {
+      .x = (short)x,
+      .y = 0,
+      .width = (unsigned short)width,
+      .height = (unsigned short)p->h,
+    };
+
+    XftDrawSetClipRectangles(p->draw, 0, 0, &clip, 1);
+    draw_text_at(p, tx, text, scheme);
+    XftDrawSetClip(p->draw, NULL);
+  }
   return width;
 }
 
