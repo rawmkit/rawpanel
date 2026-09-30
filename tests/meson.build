@@ -34,6 +34,21 @@ test('status-worker-control', worker_test)
 test('config', find_program('config.sh'),
      args: [rawpanel, meson.project_source_root() / 'config' / 'rawpanel.conf'])
 
+config_defaults_test = executable(
+  'config-defaults-test',
+  'config-defaults-test.c',
+  '../src/config.c',
+  '../src/status/config.c',
+  '../src/status/status.c',
+  include_directories: status_inc,
+  dependencies: [config_dep],
+)
+test(
+  'config-defaults',
+  config_defaults_test,
+  args: [meson.project_source_root() / 'config' / 'rawpanel.conf'],
+)
+
 fake_rawm = executable('fake-rawm', 'fake-rawm.c', dependencies: [x11_dep])
 panel_probe = executable('panel-probe', 'panel-probe.c', dependencies: [x11_dep])
 test('panel', find_program('panel.sh'), args: [rawpanel, fake_rawm, panel_probe], timeout: 15)
