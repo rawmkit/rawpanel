@@ -338,7 +338,7 @@ int rawpanel_rawm_read_state(RawpanelRawm *rawm, RawpanelRawmState *state, FILE 
 
   for (line = strtok_r(text, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
     if (!header) {
-      if (strcmp(line, "rawm-state-v1")) goto invalid;
+      if (strcmp(line, "rawm-state-v2")) goto invalid;
       header = true;
       continue;
     }
@@ -363,29 +363,33 @@ int rawpanel_rawm_read_state(RawpanelRawm *rawm, RawpanelRawmState *state, FILE 
     if (!strncmp(line, "monitor\t", 8)) {
       RawpanelRawmMonitor m = {0};
       RawpanelRawmMonitor *monitors;
-      char *fields[14];
-      long number, x, y, width, height, nmaster;
+      char *fields[18];
+      long number, x, y, width, height, work_x, work_y, work_width, work_height, nmaster;
       unsigned long selected;
       char *end = NULL;
 
       if (!tag_count_seen || parsed.monitor_count >= RAWPANEL_MAX_MONITORS ||
-          split_fields(line, fields, 14u) < 0 || strcmp(fields[0], "monitor") ||
+          split_fields(line, fields, 18u) < 0 || strcmp(fields[0], "monitor") ||
           parse_long_field(fields[1], 0, INT_MAX, &number) < 0 ||
           parse_ulong_field(fields[2], 10, 1, &selected) < 0 ||
           parse_long_field(fields[3], INT_MIN, INT_MAX, &x) < 0 ||
           parse_long_field(fields[4], INT_MIN, INT_MAX, &y) < 0 ||
           parse_long_field(fields[5], 1, INT_MAX, &width) < 0 ||
           parse_long_field(fields[6], 1, INT_MAX, &height) < 0 ||
-          parse_mask_field(fields[7], &m.viewed) < 0 ||
-          parse_mask_field(fields[8], &m.occupied) < 0 ||
-          parse_mask_field(fields[9], &m.urgent) < 0 ||
-          layout_id(fields[10]) < 0 ||
-          parse_xid_field(fields[11], true, &m.focused) < 0 ||
-          parse_long_field(fields[12], 0, INT_MAX, &nmaster) < 0)
+          parse_long_field(fields[7], INT_MIN, INT_MAX, &work_x) < 0 ||
+          parse_long_field(fields[8], INT_MIN, INT_MAX, &work_y) < 0 ||
+          parse_long_field(fields[9], 1, INT_MAX, &work_width) < 0 ||
+          parse_long_field(fields[10], 1, INT_MAX, &work_height) < 0 ||
+          parse_mask_field(fields[11], &m.viewed) < 0 ||
+          parse_mask_field(fields[12], &m.occupied) < 0 ||
+          parse_mask_field(fields[13], &m.urgent) < 0 ||
+          layout_id(fields[14]) < 0 ||
+          parse_xid_field(fields[15], true, &m.focused) < 0 ||
+          parse_long_field(fields[16], 0, INT_MAX, &nmaster) < 0)
         goto invalid;
       errno = 0;
-      m.mfact = strtod(fields[13], &end);
-      if (errno || !end || end == fields[13] || *end || !isfinite(m.mfact) ||
+      m.mfact = strtod(fields[17], &end);
+      if (errno || !end || end == fields[17] || *end || !isfinite(m.mfact) ||
           m.mfact < 0.1 || m.mfact > 0.9)
         goto invalid;
       m.number = (int)number;
@@ -396,8 +400,12 @@ int rawpanel_rawm_read_state(RawpanelRawm *rawm, RawpanelRawmState *state, FILE 
       m.y = (int)y;
       m.width = (int)width;
       m.height = (int)height;
+      m.work_x = (int)work_x;
+      m.work_y = (int)work_y;
+      m.work_width = (int)work_width;
+      m.work_height = (int)work_height;
       m.nmaster = (int)nmaster;
-      m.layout = dupbytes(fields[10], strlen(fields[10]));
+      m.layout = dupbytes(fields[14], strlen(fields[14]));
       m.visible_count = UINT_MAX;
       if (!m.layout) goto oom;
       monitors = realloc(parsed.monitors,

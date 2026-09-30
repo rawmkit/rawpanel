@@ -1,6 +1,7 @@
 # NEWS
 
 ## 0.1.0
+- Consume rawm state version 2, including the producer-owned work-area rectangle, while retaining full-monitor geometry for panel placement.
 
 - Establish standalone persistent-panel authority.
 - Consume rawm authoritative monitor/tag/layout/stack state.

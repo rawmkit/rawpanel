@@ -68,10 +68,10 @@ int
 main(void)
 {
   static const char state[] =
-    "rawm-state-v1\n"
+    "rawm-state-v2\n"
     "tag-count\t2\n"
     "selected-monitor\t0\n"
-    "monitor\t0\t1\t0\t0\t800\t600\t00000001\t00000003\t00000000\ttile\t0x101\t1\t0.550000\n"
+    "monitor\t0\t1\t0\t0\t800\t600\t0\t0\t800\t600\t00000001\t00000003\t00000000\ttile\t0x101\t1\t0.550000\n"
     "stack\t0\t1\t2\n"
     "tag\t0\t1\tone\n"
     "tag\t0\t2\ttwo\n";
@@ -115,15 +115,15 @@ main(void)
     fail("valid state decoded incorrectly");
 
   set_utf8(dpy, owner, "_RAWM_STATE",
-           "rawm-state-v1\nunknown\tvalue\n");
+           "rawm-state-v2\nunknown\tvalue\n");
   if (rawpanel_rawm_read_state(&rawm, &parsed, NULL) == 0)
     fail("unknown state record was accepted");
 
   set_utf8(dpy, owner, "_RAWM_STATE",
-           "rawm-state-v1\n"
+           "rawm-state-v2\n"
            "tag-count\t1\n"
            "selected-monitor\t0\n"
-           "monitor\t0\t1\t0\t0\t800\t600\t1\t00000001\t00000000\ttile\t0x101\t1\t0.550000\n"
+           "monitor\t0\t1\t0\t0\t800\t600\t0\t0\t800\t600\t1\t00000001\t00000000\ttile\t0x101\t1\t0.550000\n"
            "stack\t0\t1\t1\n"
            "tag\t0\t1\tone\n");
   if (rawpanel_rawm_read_state(&rawm, &parsed, NULL) == 0)

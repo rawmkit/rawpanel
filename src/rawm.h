@@ -15,6 +15,7 @@ typedef struct {
   int number;
   bool selected;
   int x, y, width, height;
+  int work_x, work_y, work_width, work_height;
   uint32_t viewed, occupied, urgent;
   char *layout;
   Window focused;

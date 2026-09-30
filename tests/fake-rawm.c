@@ -27,10 +27,10 @@ int main(void)
   Atom supported[sizeof(supported_names) / sizeof(supported_names[0])];
   size_t i;
   const char state[] =
-    "rawm-state-v1\n"
+    "rawm-state-v2\n"
     "tag-count\t3\n"
     "selected-monitor\t0\n"
-    "monitor\t0\t1\t0\t0\t800\t600\t00000001\t00000003\t00000000\ttile\t0x0\t1\t0.500000\n"
+    "monitor\t0\t1\t0\t0\t800\t600\t0\t0\t800\t600\t00000001\t00000003\t00000000\ttile\t0x0\t1\t0.500000\n"
     "stack\t0\t0\t0\n"
     "tag\t0\t1\tone\n"
     "tag\t0\t2\ttwo\n"
