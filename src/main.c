@@ -74,6 +74,10 @@ typedef struct {
   TrayIcon *icons;
 } Tray;
 
+typedef struct {
+  int error_code;
+} XErrorTrap;
+
 static volatile sig_atomic_t terminate_requested;
 static Display *dpy;
 static int screen_no;
@@ -98,8 +102,36 @@ static Atom control_selection, control_version_atom, control_supported_atom;
 static Atom control_command_atom;
 static Atom control_commands[4];
 static bool control_volume_available;
+static XErrorTrap *active_xerror_trap;
+static int (*saved_xerror_handler)(Display *, XErrorEvent *);
 
 static void on_signal(int signo) { (void)signo; terminate_requested = 1; }
+
+static int trap_xerror(Display *display, XErrorEvent *event)
+{
+  (void)display;
+  if (active_xerror_trap && active_xerror_trap->error_code == 0) {
+    active_xerror_trap->error_code = event->error_code;
+  }
+  return 0;
+}
+
+static void xerror_trap_begin(XErrorTrap *trap)
+{
+  XSync(dpy, False);
+  memset(trap, 0, sizeof(*trap));
+  active_xerror_trap = trap;
+  saved_xerror_handler = XSetErrorHandler(trap_xerror);
+}
+
+static int xerror_trap_end(XErrorTrap *trap)
+{
+  XSync(dpy, False);
+  active_xerror_trap = NULL;
+  XSetErrorHandler(saved_xerror_handler);
+  saved_xerror_handler = NULL;
+  return trap->error_code;
+}
 
 static void die(const char *msg)
 {
@@ -440,14 +472,47 @@ static void set_dock_properties(Panel *p, const RawpanelRawmMonitor *m)
                   (unsigned char *)"rawpanel", 8);
 }
 
+static bool tray_save_window(Window win)
+{
+  XErrorTrap trap;
+
+  xerror_trap_begin(&trap);
+  XAddToSaveSet(dpy, win);
+  return xerror_trap_end(&trap) == 0;
+}
+
+static void tray_unsave_window(Window win)
+{
+  XErrorTrap trap;
+
+  xerror_trap_begin(&trap);
+  XRemoveFromSaveSet(dpy, win);
+  (void)xerror_trap_end(&trap);
+}
+
+static bool tray_detach_window(Window win)
+{
+  XErrorTrap trap;
+
+  xerror_trap_begin(&trap);
+  XUnmapWindow(dpy, win);
+  XReparentWindow(dpy, win, root, 0, 0);
+  return xerror_trap_end(&trap) == 0;
+}
+
+static void tray_release_window(Window win)
+{
+  if (!tray_detach_window(win))
+    return;
+  tray_unsave_window(win);
+}
+
 static void tray_detach_icons(void)
 {
   TrayIcon *icon;
 
-  for (icon = tray.icons; icon; icon = icon->next) {
-    XUnmapWindow(dpy, icon->win);
-    XReparentWindow(dpy, icon->win, root, 0, 0);
-  }
+  for (icon = tray.icons; icon; icon = icon->next)
+    (void)tray_detach_window(icon->win);
 }
 
 static void destroy_panels(void)
@@ -563,9 +628,12 @@ static void reconcile_panels(void)
   draw_all();
 }
 
-static void tray_send(Window win, long message, long d1, long d2, long d3)
+static bool tray_send(Window win, long message, long d1, long d2, long d3)
 {
+  XErrorTrap trap;
   XEvent ev;
+  Status sent;
+
   memset(&ev, 0, sizeof(ev));
   ev.xclient.type = ClientMessage;
   ev.xclient.window = win;
@@ -576,7 +644,11 @@ static void tray_send(Window win, long message, long d1, long d2, long d3)
   ev.xclient.data.l[2] = d1;
   ev.xclient.data.l[3] = d2;
   ev.xclient.data.l[4] = d3;
-  XSendEvent(dpy, win, False, NoEventMask, &ev);
+  xerror_trap_begin(&trap);
+  sent = XSendEvent(dpy, win, False, NoEventMask, &ev);
+  if (xerror_trap_end(&trap) != 0)
+    return false;
+  return sent != 0;
 }
 
 static Panel *selected_panel(void)
@@ -586,27 +658,53 @@ static Panel *selected_panel(void)
   return panel_count ? &panels[0] : NULL;
 }
 
+static bool tray_place_icon(TrayIcon *icon, Panel *panel, int x)
+{
+  XErrorTrap trap;
+  int y = (panel->h - (int)cfg.systray_icon_size) / 2;
+
+  xerror_trap_begin(&trap);
+  XReparentWindow(dpy, icon->win, panel->win, x, y);
+  XMoveResizeWindow(dpy, icon->win, x, y, cfg.systray_icon_size,
+                    cfg.systray_icon_size);
+  if (icon->mapped)
+    XMapRaised(dpy, icon->win);
+  else
+    XUnmapWindow(dpy, icon->win);
+  return xerror_trap_end(&trap) == 0;
+}
+
 static void tray_arrange(void)
 {
-  TrayIcon *i;
+  TrayIcon **pp;
   Panel *p = selected_panel();
   int x;
+  bool removed = false;
+
   if (!p || !cfg.systray_enabled) return;
   x = p->w - (int)cfg.padding - (int)tray_width();
-  for (i = tray.icons; i; i = i->next) {
-    int y = (p->h - (int)cfg.systray_icon_size) / 2;
-    XReparentWindow(dpy, i->win, p->win, x, y);
-    XMoveResizeWindow(dpy, i->win, x, y, cfg.systray_icon_size,
-                      cfg.systray_icon_size);
-    if (i->mapped) {
-      XMapRaised(dpy, i->win);
-      x += (int)cfg.systray_icon_size + (int)cfg.systray_spacing;
-    } else {
-      XUnmapWindow(dpy, i->win);
+  pp = &tray.icons;
+  while (*pp) {
+    TrayIcon *icon = *pp;
+    if (!tray_place_icon(icon, p, x)) {
+      *pp = icon->next;
+      tray_release_window(icon->win);
+      free(icon);
+      removed = true;
+      continue;
     }
+    if (icon->mapped)
+      x += (int)cfg.systray_icon_size + (int)cfg.systray_spacing;
+    pp = &icon->next;
+  }
+  if (removed) {
+    tray_arrange();
+    return;
   }
   draw_all();
 }
+
+static void tray_remove(Window win);
 
 static TrayIcon *tray_find(Window win)
 {
@@ -621,17 +719,26 @@ static TrayIcon *tray_find(Window win)
 static void tray_sync_mapped(Window win)
 {
   TrayIcon *icon = tray_find(win);
+  XErrorTrap trap;
   Atom actual = None;
   int format = 0;
   unsigned long nitems = 0, after = 0;
   unsigned char *data = NULL;
   bool mapped = false;
+  int status;
 
   if (!icon)
     return;
-  if (XGetWindowProperty(dpy, win, tray.xembed_info, 0, 2, False,
-                         tray.xembed_info, &actual, &format, &nitems, &after,
-                         &data) == Success && actual == tray.xembed_info &&
+  xerror_trap_begin(&trap);
+  status = XGetWindowProperty(dpy, win, tray.xembed_info, 0, 2, False,
+                              tray.xembed_info, &actual, &format, &nitems,
+                              &after, &data);
+  if (xerror_trap_end(&trap) != 0) {
+    if (data) XFree(data);
+    tray_remove(win);
+    return;
+  }
+  if (status == Success && actual == tray.xembed_info &&
       format == 32 && nitems >= 2)
     mapped = (((unsigned long *)data)[1] & XEMBED_MAPPED) != 0;
   if (data)
@@ -640,10 +747,6 @@ static void tray_sync_mapped(Window win)
   if (icon->mapped == mapped)
     return;
   icon->mapped = mapped;
-  if (mapped)
-    XMapRaised(dpy, icon->win);
-  else
-    XUnmapWindow(dpy, icon->win);
   tray_arrange();
 }
 
@@ -654,6 +757,7 @@ static void tray_remove(Window win)
     if ((*pp)->win == win) {
       TrayIcon *old = *pp;
       *pp = old->next;
+      tray_release_window(old->win);
       free(old);
       tray_arrange();
       return;
@@ -665,26 +769,49 @@ static void tray_remove(Window win)
 static void tray_dock(Window win)
 {
   TrayIcon *icon;
+  XErrorTrap trap;
   unsigned long flags = XEMBED_MAPPED;
   Atom actual = None;
   int format = 0;
   unsigned long nitems = 0, after = 0;
   unsigned char *data = NULL;
-  if (!win) return;
-  if (tray_find(win)) return;
+  int status;
+
+  if (!win || tray_find(win)) return;
   icon = calloc(1, sizeof(*icon));
   if (!icon) return;
-  icon->win = win; icon->mapped = true; icon->next = tray.icons; tray.icons = icon;
+
+  if (!tray_save_window(win)) {
+    free(icon);
+    return;
+  }
+  xerror_trap_begin(&trap);
   XSelectInput(dpy, win, StructureNotifyMask | PropertyChangeMask | ResizeRedirectMask);
-  if (XGetWindowProperty(dpy, win, tray.xembed_info, 0, 2, False, tray.xembed_info,
-                         &actual, &format, &nitems, &after, &data) == Success &&
-      actual == tray.xembed_info && format == 32 && nitems >= 2)
+  status = XGetWindowProperty(dpy, win, tray.xembed_info, 0, 2, False,
+                              tray.xembed_info, &actual, &format, &nitems,
+                              &after, &data);
+  if (xerror_trap_end(&trap) != 0) {
+    if (data) XFree(data);
+    tray_unsave_window(win);
+    free(icon);
+    return;
+  }
+  if (status == Success && actual == tray.xembed_info &&
+      format == 32 && nitems >= 2)
     flags = ((unsigned long *)data)[1];
   if (data) XFree(data);
+
+  icon->win = win;
   icon->mapped = (flags & XEMBED_MAPPED) != 0;
+  icon->next = tray.icons;
+  tray.icons = icon;
   tray_arrange();
-  tray_send(win, XEMBED_EMBEDDED_NOTIFY, 0,
-            selected_panel() ? (long)selected_panel()->win : 0, XEMBED_VERSION);
+  if (!tray_find(win))
+    return;
+  if (!tray_send(win, XEMBED_EMBEDDED_NOTIFY, 0,
+                 selected_panel() ? (long)selected_panel()->win : 0,
+                 XEMBED_VERSION))
+    tray_remove(win);
 }
 
 static void tray_init(void)
@@ -731,7 +858,13 @@ static void tray_init(void)
 static void tray_destroy(void)
 {
   TrayIcon *i = tray.icons;
-  while (i) { TrayIcon *n = i->next; XReparentWindow(dpy, i->win, root, 0, 0); free(i); i = n; }
+
+  while (i) {
+    TrayIcon *n = i->next;
+    tray_release_window(i->win);
+    free(i);
+    i = n;
+  }
   if (tray.owner) XDestroyWindow(dpy, tray.owner);
   memset(&tray, 0, sizeof(tray));
 }

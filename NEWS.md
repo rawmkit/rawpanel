@@ -1,6 +1,7 @@
 # NEWS
 
 ## 0.1.0
+- Preserve peer-owned XEmbed windows across abrupt panel loss with the X save-set, and contain disappearing-client X errors instead of terminating the panel.
 - Clip text rendering to each allocated panel cell so long window titles cannot draw across status or tray surfaces.
 - Center status separators between adjacent cells instead of applying cell padding to the separator glyph.
 - Complete the XEmbed tray lifecycle: publish the tray visual, embed unmapped clients, track `_XEMBED_INFO` mapped state, and preserve icons across panel topology recreation.

@@ -26,6 +26,7 @@ It does not own window placement, tags, layouts, focus, global keyboard grabs,
 or session process supervision.
 
 The tray reserves panel width only for XEmbed clients whose `XEMBED_MAPPED` flag is set. An enabled but empty tray therefore has no visible blank cell.
+Embedded windows are kept in the X save-set so an abrupt panel disconnect cannot destroy client-owned tray windows; races with clients that withdraw or destroy an icon are contained at the X11 peer boundary.
 
 ## Control membrane
 
