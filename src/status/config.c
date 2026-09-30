@@ -69,7 +69,7 @@ rawpanel_status_config_init(RawpanelStatusConfig *cfg)
   source->id = xstrdup("clock");
   source->enabled = true;
   source->provider = RAWPANEL_STATUS_PROVIDER_CLOCK;
-  source->period_ms = 5000;
+  source->period_ms = 30000;
   source->format = xstrdup("%a %b %d %H:%M");
   source->timeout_ms = RAWPANEL_STATUS_DEFAULT_EXEC_TIMEOUT_MS;
 }

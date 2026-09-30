@@ -83,6 +83,5 @@ typedef struct {
 void rawpanel_config_init(RawpanelConfig *cfg);
 void rawpanel_config_destroy(RawpanelConfig *cfg);
 int rawpanel_config_load(RawpanelConfig *cfg, const char *path, FILE *err);
-int rawpanel_config_find_default(char *buffer, size_t capacity);
 
 #endif

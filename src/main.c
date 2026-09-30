@@ -839,7 +839,6 @@ static void usage(FILE *out)
 int main(int argc, char **argv)
 {
   const char *path = NULL;
-  char default_path[4096];
   bool check = false;
   bool status_debug = false;
   int opt, rc;
@@ -863,10 +862,6 @@ int main(int argc, char **argv)
     }
   }
   if (optind != argc) { usage(stderr); rawpanel_config_destroy(&cfg); return 2; }
-  if (!path) {
-    if (rawpanel_config_find_default(default_path, sizeof(default_path)) < 0) die("rawpanel: no configuration path\n");
-    path = default_path;
-  }
   if (rawpanel_config_load(&cfg, path, stderr) < 0) { rawpanel_config_destroy(&cfg); return 1; }
   if (check) { rawpanel_config_destroy(&cfg); return 0; }
   if (status_debug) {
