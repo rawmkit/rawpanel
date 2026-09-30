@@ -54,6 +54,8 @@ panel_probe = executable('panel-probe', 'panel-probe.c', dependencies: [x11_dep]
 tray_client = executable('tray-client', 'tray-client.c', dependencies: [x11_dep])
 test('panel', find_program('panel.sh'),
      args: [rawpanel, fake_rawm, panel_probe, tray_client], timeout: 15)
+test('tray-lifetime', find_program('tray-lifetime.sh'),
+     args: [rawpanel, fake_rawm, tray_client], timeout: 15)
 
 rawm_protocol_test = executable(
   'rawm-protocol-test',
