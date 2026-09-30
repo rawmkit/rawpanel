@@ -9,6 +9,17 @@ rawpanel.conf - rawpanel configuration
 The file uses libconfig syntax. It contains only panel-local presentation,
 status, tray, and pointer-interaction policy.
 
+In normal mode rawpanel starts with compiled defaults, applies
+_${SYSCONFDIR}/rawpanel/rawpanel.conf_ (normally
+_/etc/rawpanel/rawpanel.conf_) when present, then applies the XDG user file.
+Later scalar settings override earlier values; *buttons* replaces the complete
+button list when present, while named status sources overlay the source with the
+same identifier. With *rawpanel -c FILE*, system and user discovery are skipped
+and exactly _FILE_ is applied to compiled defaults.
+
+The schema is fail-closed. Unknown settings and settings with the wrong type are
+errors.
+
 # PANEL
 
 *panel* is a group. Supported members are *font*, *position* (*top* or
@@ -43,11 +54,14 @@ actions may use *layout*.
 
 # FILES
 
+_${SYSCONFDIR}/rawpanel/rawpanel.conf_
+	System configuration, normally _/etc/rawpanel/rawpanel.conf_.
+
 _$XDG\_CONFIG\_HOME/rawpanel/rawpanel.conf_
+	User override when *XDG_CONFIG_HOME* is absolute.
 
-_~/.config/rawpanel/rawpanel.conf_
-
-_/etc/rawpanel/rawpanel.conf_
+_$HOME/.config/rawpanel/rawpanel.conf_
+	User override otherwise.
 
 # SEE ALSO
 

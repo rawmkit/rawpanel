@@ -22,7 +22,8 @@ client lists. Focused-title presentation comes from rawm's authoritative
 # OPTIONS
 
 *-c* _FILE_
-	Read configuration from _FILE_.
+	Apply exactly _FILE_ to built-in defaults, bypassing the normal system and
+	user configuration files.
 
 *-C*
 	Validate configuration and exit without opening X11.
@@ -35,6 +36,17 @@ client lists. Focused-title presentation comes from rawm's authoritative
 
 *-h*
 	Print usage and exit.
+
+# CONFIGURATION
+
+Without *-c*, rawpanel layers built-in defaults, the system file
+_${SYSCONFDIR}/rawpanel/rawpanel.conf_ (normally
+_/etc/rawpanel/rawpanel.conf_), then the user file from
+_$XDG_CONFIG_HOME/rawpanel/rawpanel.conf_ when *XDG_CONFIG_HOME* is absolute,
+or _$HOME/.config/rawpanel/rawpanel.conf_ otherwise. Missing default files are
+allowed.
+
+Unknown settings and settings with the wrong type fail validation.
 
 # CONTROL AUTHORITY
 

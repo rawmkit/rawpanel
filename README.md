@@ -36,10 +36,16 @@ property is used.
 
 ## Configuration
 
-The default search path is `$XDG_CONFIG_HOME/rawpanel/rawpanel.conf`, then
-`~/.config/rawpanel/rawpanel.conf`, with `/etc/rawpanel/rawpanel.conf` as the
-system location when no home config path can be formed. Use `-c FILE` to select
-an explicit file and `-C` to validate configuration without opening X11.
+Built-in defaults are layered with `/etc/rawpanel/rawpanel.conf`, then an
+optional user override from `$XDG_CONFIG_HOME/rawpanel/rawpanel.conf` when
+`XDG_CONFIG_HOME` is absolute, otherwise from
+`~/.config/rawpanel/rawpanel.conf`. Missing default files are allowed. Use
+`-c FILE` to bypass system/user discovery and apply exactly that explicit
+overlay to built-in defaults. `-C` validates configuration without opening X11.
+
+The schema is fail-closed: unknown settings, wrong types, and malformed button
+or status policy are configuration errors rather than ignored compatibility
+state.
 
 ## Build
 
