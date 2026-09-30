@@ -1,6 +1,8 @@
 # NEWS
 
 ## 0.1.0
+- Center status separators between adjacent cells instead of applying cell padding to the separator glyph.
+- Complete the XEmbed tray lifecycle: publish the tray visual, embed unmapped clients, track `_XEMBED_INFO` mapped state, and preserve icons across panel topology recreation.
 - Consume rawm state version 2, including the producer-owned work-area rectangle, while retaining full-monitor geometry for panel placement.
 
 - Establish standalone persistent-panel authority.

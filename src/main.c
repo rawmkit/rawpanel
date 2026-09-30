@@ -67,6 +67,7 @@ typedef struct {
   Atom selection;
   Atom opcode;
   Atom orientation;
+  Atom visual;
   Atom manager;
   Atom xembed;
   Atom xembed_info;
@@ -137,20 +138,27 @@ static void fill(Pixmap pix, int x, int y, int w, int h, RawpanelScheme scheme)
   XFillRectangle(dpy, pix, gc, x, y, (unsigned int)w, (unsigned int)h);
 }
 
+static void draw_text_at(Panel *p, int x, const char *text,
+                         RawpanelScheme scheme)
+{
+  int ascent = font->ascent;
+  int descent = font->descent;
+  int baseline = (p->h - (ascent + descent)) / 2 + ascent;
+
+  XftDrawStringUtf8(p->draw, scheme_color(scheme, RAWPANEL_COLOR_FOREGROUND),
+                    font, x, baseline, (const FcChar8 *)text, (int)strlen(text));
+}
+
 static int draw_text(Panel *p, int x, int width, const char *text,
                      RawpanelScheme scheme, bool cell)
 {
   int tw = text_width(text);
-  int ascent = font->ascent;
-  int descent = font->descent;
-  int baseline = (p->h - (ascent + descent)) / 2 + ascent;
   int tx = x + (int)cfg.cell_margin;
   int inner = width - (int)(cfg.cell_margin * 2u);
   if (cell) fill(p->pixmap, x, 0, width, p->h, scheme);
   if (inner < 0) inner = 0;
   if (tw < inner) tx = x + (width - tw) / 2;
-  XftDrawStringUtf8(p->draw, scheme_color(scheme, RAWPANEL_COLOR_FOREGROUND),
-                    font, tx, baseline, (const FcChar8 *)text, (int)strlen(text));
+  draw_text_at(p, tx, text, scheme);
   return width;
 }
 
@@ -276,12 +284,15 @@ static void draw_panel(Panel *p)
         RawpanelScheme scheme = status_scheme(statusdata.segments[si].state);
         int w;
         if (si) {
-          cursor += (int)cfg.item_spacing;
+          int before = (int)cfg.item_spacing / 2;
+          int after = (int)cfg.item_spacing - before;
+          cursor += before;
           if (cfg.status_separator && *cfg.status_separator) {
             int sw = text_width(cfg.status_separator);
-            draw_text(p, cursor, sw, cfg.status_separator, RAWPANEL_SCHEME_NORMAL, false);
+            draw_text_at(p, cursor, cfg.status_separator, RAWPANEL_SCHEME_NORMAL);
             cursor += sw;
           }
+          cursor += after;
         }
         w = text_width(statusdata.segments[si].text) + (int)(cfg.cell_margin * 2u);
         if (cursor + w > right) w = right - cursor;
@@ -352,9 +363,21 @@ static void set_dock_properties(Panel *p, const RawpanelRawmMonitor *m)
                   (unsigned char *)"rawpanel", 8);
 }
 
+static void tray_detach_icons(void)
+{
+  TrayIcon *icon;
+
+  for (icon = tray.icons; icon; icon = icon->next) {
+    XUnmapWindow(dpy, icon->win);
+    XReparentWindow(dpy, icon->win, root, 0, 0);
+  }
+}
+
 static void destroy_panels(void)
 {
   size_t i;
+
+  tray_detach_icons();
   for (i = 0; i < panel_count; ++i) {
     if (panels[i].draw) XftDrawDestroy(panels[i].draw);
     if (panels[i].pixmap) XFreePixmap(dpy, panels[i].pixmap);
@@ -391,7 +414,8 @@ static void panel_create(Panel *p, RawpanelRawmMonitor *m)
   attrs.override_redirect = True;
   attrs.background_pixel =
       scheme_color(RAWPANEL_SCHEME_NORMAL, RAWPANEL_COLOR_BACKGROUND)->pixel;
-  attrs.event_mask = ExposureMask | ButtonPressMask;
+  attrs.event_mask = ExposureMask | ButtonPressMask |
+                     SubstructureRedirectMask | SubstructureNotifyMask;
   p->monitor = m->number;
   p->x = m->x;
   p->w = m->width;
@@ -493,14 +517,57 @@ static void tray_arrange(void)
   if (!p || !cfg.systray_enabled) return;
   x = p->w - (int)cfg.padding - (int)tray_width();
   for (i = tray.icons; i; i = i->next) {
-    if (!i->mapped) continue;
-    XReparentWindow(dpy, i->win, p->win, x, (p->h - (int)cfg.systray_icon_size) / 2);
-    XMoveResizeWindow(dpy, i->win, x, (p->h - (int)cfg.systray_icon_size) / 2,
-                      cfg.systray_icon_size, cfg.systray_icon_size);
-    XMapRaised(dpy, i->win);
-    x += (int)cfg.systray_icon_size + (int)cfg.systray_spacing;
+    int y = (p->h - (int)cfg.systray_icon_size) / 2;
+    XReparentWindow(dpy, i->win, p->win, x, y);
+    XMoveResizeWindow(dpy, i->win, x, y, cfg.systray_icon_size,
+                      cfg.systray_icon_size);
+    if (i->mapped) {
+      XMapRaised(dpy, i->win);
+      x += (int)cfg.systray_icon_size + (int)cfg.systray_spacing;
+    } else {
+      XUnmapWindow(dpy, i->win);
+    }
   }
   draw_all();
+}
+
+static TrayIcon *tray_find(Window win)
+{
+  TrayIcon *icon;
+
+  for (icon = tray.icons; icon; icon = icon->next)
+    if (icon->win == win)
+      return icon;
+  return NULL;
+}
+
+static void tray_sync_mapped(Window win)
+{
+  TrayIcon *icon = tray_find(win);
+  Atom actual = None;
+  int format = 0;
+  unsigned long nitems = 0, after = 0;
+  unsigned char *data = NULL;
+  bool mapped = false;
+
+  if (!icon)
+    return;
+  if (XGetWindowProperty(dpy, win, tray.xembed_info, 0, 2, False,
+                         tray.xembed_info, &actual, &format, &nitems, &after,
+                         &data) == Success && actual == tray.xembed_info &&
+      format == 32 && nitems >= 2)
+    mapped = (((unsigned long *)data)[1] & XEMBED_MAPPED) != 0;
+  if (data)
+    XFree(data);
+
+  if (icon->mapped == mapped)
+    return;
+  icon->mapped = mapped;
+  if (mapped)
+    XMapRaised(dpy, icon->win);
+  else
+    XUnmapWindow(dpy, icon->win);
+  tray_arrange();
 }
 
 static void tray_remove(Window win)
@@ -527,7 +594,7 @@ static void tray_dock(Window win)
   unsigned long nitems = 0, after = 0;
   unsigned char *data = NULL;
   if (!win) return;
-  for (icon = tray.icons; icon; icon = icon->next) if (icon->win == win) return;
+  if (tray_find(win)) return;
   icon = calloc(1, sizeof(*icon));
   if (!icon) return;
   icon->win = win; icon->mapped = true; icon->next = tray.icons; tray.icons = icon;
@@ -554,6 +621,7 @@ static void tray_init(void)
   tray.selection = XInternAtom(dpy, name, False);
   tray.opcode = XInternAtom(dpy, "_NET_SYSTEM_TRAY_OPCODE", False);
   tray.orientation = XInternAtom(dpy, "_NET_SYSTEM_TRAY_ORIENTATION", False);
+  tray.visual = XInternAtom(dpy, "_NET_SYSTEM_TRAY_VISUAL", False);
   tray.manager = XInternAtom(dpy, "MANAGER", False);
   tray.xembed = XInternAtom(dpy, "_XEMBED", False);
   tray.xembed_info = XInternAtom(dpy, "_XEMBED_INFO", False);
@@ -562,6 +630,12 @@ static void tray_init(void)
                              CopyFromParent, CWOverrideRedirect, &attrs);
   XChangeProperty(dpy, tray.owner, tray.orientation, XA_CARDINAL, 32,
                   PropModeReplace, (unsigned char *)&orientation, 1);
+  {
+    unsigned long visual =
+      (unsigned long)XVisualIDFromVisual(DefaultVisual(dpy, screen_no));
+    XChangeProperty(dpy, tray.owner, tray.visual, XA_VISUALID, 32,
+                    PropModeReplace, (unsigned char *)&visual, 1);
+  }
   XSetSelectionOwner(dpy, tray.selection, tray.owner, CurrentTime);
   XSync(dpy, False);
   if (XGetSelectionOwner(dpy, tray.selection) != tray.owner) {
@@ -674,6 +748,9 @@ static void handle_xevent(XEvent *e)
         (e->xproperty.atom == rawm.state || e->xproperty.atom == rawm.clients)) {
       update_wm_state(); return;
     }
+    if (e->xproperty.atom == tray.xembed_info && tray_find(e->xproperty.window)) {
+      tray_sync_mapped(e->xproperty.window); return;
+    }
   }
   if (e->type == DestroyNotify) {
     if (e->xdestroywindow.window == rawm.owner) { terminate_requested = 1; return; }
@@ -684,6 +761,14 @@ static void handle_xevent(XEvent *e)
       e->xclient.window == tray.owner && e->xclient.message_type == tray.opcode &&
       e->xclient.format == 32 && e->xclient.data.l[1] == SYSTEM_TRAY_REQUEST_DOCK) {
     tray_dock((Window)e->xclient.data.l[2]); return;
+  }
+  if (e->type == MapRequest && tray_find(e->xmaprequest.window)) {
+    tray_sync_mapped(e->xmaprequest.window);
+    return;
+  }
+  if (e->type == ConfigureRequest && tray_find(e->xconfigurerequest.window)) {
+    tray_arrange();
+    return;
   }
   if (e->type == ResizeRequest) {
     TrayIcon *i;

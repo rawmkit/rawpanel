@@ -14,6 +14,7 @@ rawpanel - persistent rawmkit desktop panel
 and admitted-stack state. It acquires machine status independently and owns the
 XEmbed system-tray selection. Panel windows are EWMH docks and reserve work
 area with standard struts.
+The tray follows the XEmbed mapped flag; when no mapped tray icon is present it reserves no visible panel cell.
 
 rawpanel is not a window manager and does not reconstruct rawm state from EWMH
 client lists. Focused-title presentation comes from rawm's authoritative

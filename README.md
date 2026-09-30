@@ -19,11 +19,13 @@ observed independently from client window properties.
 - persistent panel windows and presentation;
 - native machine-status acquisition;
 - ALSA status/control for the configured mixer source;
-- the per-screen XEmbed system-tray selection;
+- the per-screen XEmbed system-tray selection and embedded-icon lifecycle;
 - panel-local pointer interaction policy.
 
 It does not own window placement, tags, layouts, focus, global keyboard grabs,
 or session process supervision.
+
+The tray reserves panel width only for XEmbed clients whose `XEMBED_MAPPED` flag is set. An enabled but empty tray therefore has no visible blank cell.
 
 ## Control membrane
 

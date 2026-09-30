@@ -5,6 +5,7 @@ case $0 in */*) test_dir=${0%/*} ;; *) test_dir=. ;; esac
 rawpanel=$1
 fake=$2
 probe=$3
+tray_client=$4
 tmp=${TMPDIR:-/tmp}/rawpanel-panel-test.$$
 mkdir -p "$tmp"
 fake_pid= panel_pid=
@@ -33,7 +34,7 @@ panel = {
   indicator_size = 1;
   tags = "occupied";
 };
-systray = { enabled = false; };
+systray = { enabled = true; spacing = 2; icon_size = 16; };
 status = { enabled = false; };
 buttons = ();
 EOC
@@ -62,6 +63,10 @@ set -- $line
 if "$probe" supported _RAWPANEL_CMD_VOLUME_MUTE; then
   fail "volume capability was advertised without an active status worker"
 fi
+"$tray_client" >"$tmp/tray.log" 2>&1 || {
+  cat "$tmp/tray.log" >&2 || true
+  fail "XEmbed tray lifecycle failed"
+}
 "$probe" toggle
 wait_dock 0 >/dev/null
 "$probe" toggle
