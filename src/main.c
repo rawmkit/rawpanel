@@ -116,6 +116,50 @@ static int text_width(const char *text)
   return (int)ext.xOff;
 }
 
+static int text_width_n(const char *text, size_t len)
+{
+  XGlyphInfo ext;
+  if (!text || !len) return 0;
+  XftTextExtentsUtf8(dpy, font, (const FcChar8 *)text, (int)len, &ext);
+  return (int)ext.xOff;
+}
+
+static size_t utf8_char_len(const char *text, size_t remaining)
+{
+  const unsigned char *p = (const unsigned char *)text;
+
+  if (!remaining || !p[0]) return 0;
+  if (p[0] < 0x80u) return 1;
+  if ((p[0] & 0xe0u) == 0xc0u && remaining >= 2 &&
+      (p[1] & 0xc0u) == 0x80u)
+    return 2;
+  if ((p[0] & 0xf0u) == 0xe0u && remaining >= 3 &&
+      (p[1] & 0xc0u) == 0x80u && (p[2] & 0xc0u) == 0x80u)
+    return 3;
+  if ((p[0] & 0xf8u) == 0xf0u && remaining >= 4 &&
+      (p[1] & 0xc0u) == 0x80u && (p[2] & 0xc0u) == 0x80u &&
+      (p[3] & 0xc0u) == 0x80u)
+    return 4;
+  return 1;
+}
+
+static size_t text_fit_prefix(const char *text, int max_width)
+{
+  size_t len = strlen(text), pos = 0, best = 0;
+
+  if (max_width <= 0) return 0;
+  while (pos < len) {
+    size_t step = utf8_char_len(text + pos, len - pos);
+    if (!step) break;
+    pos += step;
+    if (text_width_n(text, pos) <= max_width)
+      best = pos;
+    else
+      break;
+  }
+  return best;
+}
+
 static unsigned int xmods(unsigned int state)
 {
   unsigned int out = 0;
@@ -152,11 +196,32 @@ static void draw_text_at(Panel *p, int x, const char *text,
 static int draw_text(Panel *p, int x, int width, const char *text,
                      RawpanelScheme scheme, bool cell)
 {
-  int tw = text_width(text);
+  const char *shown = text ? text : "";
+  char *truncated = NULL;
+  int tw = text_width(shown);
   int tx = x + (int)cfg.cell_margin;
   int inner = width - (int)(cfg.cell_margin * 2u);
+
   if (cell) fill(p->pixmap, x, 0, width, p->h, scheme);
   if (inner < 0) inner = 0;
+  if (tw > inner && inner > 0) {
+    const char dots[] = "...";
+    size_t dots_len = sizeof(dots) - 1u;
+    int dots_width;
+    size_t prefix;
+
+    while (dots_len && text_width_n(dots, dots_len) > inner) --dots_len;
+    dots_width = text_width_n(dots, dots_len);
+    prefix = text_fit_prefix(shown, inner - dots_width);
+    truncated = malloc(prefix + dots_len + 1u);
+    if (truncated) {
+      memcpy(truncated, shown, prefix);
+      memcpy(truncated + prefix, dots, dots_len);
+      truncated[prefix + dots_len] = '\0';
+      shown = truncated;
+      tw = text_width(shown);
+    }
+  }
   if (tw < inner) tx = x + (width - tw) / 2;
   {
     XRectangle clip = {
@@ -167,9 +232,10 @@ static int draw_text(Panel *p, int x, int width, const char *text,
     };
 
     XftDrawSetClipRectangles(p->draw, 0, 0, &clip, 1);
-    draw_text_at(p, tx, text, scheme);
+    draw_text_at(p, tx, shown, scheme);
     XftDrawSetClip(p->draw, NULL);
   }
+  free(truncated);
   return width;
 }
 
