@@ -8,10 +8,12 @@ probe=$3
 tray_client=$4
 tmp=${TMPDIR:-/tmp}/rawpanel-panel-test.$$
 mkdir -p "$tmp"
-fake_pid= panel_pid=
+fake_pid= panel_pid= cover_pid=
 cleanup() {
+  [ -z "$cover_pid" ] || kill "$cover_pid" 2>/dev/null || true
   [ -z "$panel_pid" ] || kill "$panel_pid" 2>/dev/null || true
   [ -z "$fake_pid" ] || kill "$fake_pid" 2>/dev/null || true
+  [ -z "$cover_pid" ] || wait "$cover_pid" 2>/dev/null || true
   [ -z "$panel_pid" ] || wait "$panel_pid" 2>/dev/null || true
   [ -z "$fake_pid" ] || wait "$fake_pid" 2>/dev/null || true
   test_xvfb_stop
@@ -57,7 +59,27 @@ wait_dock() {
 }
 line=$(wait_dock 1)
 set -- $line
+dock_win=$1
 [ "$2 $3 $4 $5 $6 $7 $8" = "0 0 800 24 1 24 0" ] || fail "unexpected dock: $line"
+
+# A passive rawm state refresh redraws/reconciles panel content but must not
+# assert new stacking authority. Keep an already higher external surface above
+# the mapped dock while the authoritative state property is republished.
+"$probe" hold >"$tmp/cover.out" 2>"$tmp/cover.err" & cover_pid=$!
+n=0
+while [ ! -s "$tmp/cover.out" ]; do
+  n=$((n+1)); [ "$n" -lt 100 ] || fail "stacking fixture did not publish window id"
+  sleep 0.02
+done
+cover_win=$(sed -n '1p' "$tmp/cover.out")
+"$probe" above "$dock_win" "$cover_win" || fail "stacking fixture did not start above dock"
+"$probe" touch-rawm || fail "could not republish rawm state"
+sleep 0.08
+"$probe" above "$dock_win" "$cover_win" ||
+  fail "passive rawm state refresh raised dock across external surface"
+kill "$cover_pid" 2>/dev/null || true
+wait "$cover_pid" 2>/dev/null || true
+cover_pid=
 "$probe" supported _RAWPANEL_CMD_TOGGLE_VISIBILITY ||
   fail "toggle-visibility capability was not advertised"
 if "$probe" supported _RAWPANEL_CMD_VOLUME_MUTE; then

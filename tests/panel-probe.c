@@ -1,8 +1,80 @@
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+
+static Window parse_window(const char *text)
+{
+  char *end = NULL;
+  unsigned long value;
+  errno = 0;
+  value = strtoul(text, &end, 0);
+  if (errno || !end || end == text || *end || !value || value > UINT32_MAX)
+    return None;
+  return (Window)value;
+}
+
+static int window_above(Display *dpy, Window lower, Window upper)
+{
+  Window root = RootWindow(dpy, DefaultScreen(dpy));
+  Window root_return, parent, *children = NULL;
+  unsigned int n = 0, i;
+  int lower_index = -1, upper_index = -1;
+  if (!XQueryTree(dpy, root, &root_return, &parent, &children, &n)) return 0;
+  for (i = 0; i < n; ++i) {
+    if (children[i] == lower) lower_index = (int)i;
+    if (children[i] == upper) upper_index = (int)i;
+  }
+  if (children) XFree(children);
+  return lower_index >= 0 && upper_index > lower_index;
+}
+
+static int hold_surface(Display *dpy)
+{
+  Window root = RootWindow(dpy, DefaultScreen(dpy));
+  XSetWindowAttributes attrs = {0};
+  Window win;
+  attrs.override_redirect = True;
+  win = XCreateWindow(dpy, root, 40, 40, 320, 180, 0, CopyFromParent,
+                      InputOutput, CopyFromParent, CWOverrideRedirect, &attrs);
+  if (!win) return 1;
+  XMapRaised(dpy, win);
+  XFlush(dpy);
+  printf("0x%lx\n", (unsigned long)win);
+  fflush(stdout);
+  for (;;) pause();
+}
+
+static int touch_rawm_state(Display *dpy)
+{
+  int screen = DefaultScreen(dpy);
+  char selection[64];
+  Atom sel, prop, actual = None;
+  Window owner;
+  int format = 0;
+  unsigned long n = 0, after = 0;
+  unsigned char *data = NULL;
+
+  snprintf(selection, sizeof(selection), "_RAWM_CONTROL_S%d", screen);
+  sel = XInternAtom(dpy, selection, True);
+  prop = XInternAtom(dpy, "_RAWM_STATE", True);
+  if (!sel || !prop || !(owner = XGetSelectionOwner(dpy, sel))) return 1;
+  if (XGetWindowProperty(dpy, owner, prop, 0, 65536, False, AnyPropertyType,
+                         &actual, &format, &n, &after, &data) != Success ||
+      actual == None || (format != 8 && format != 16 && format != 32) || after) {
+    if (data) XFree(data);
+    return 1;
+  }
+  XChangeProperty(dpy, owner, prop, actual, format, PropModeReplace, data, (int)n);
+  if (data) XFree(data);
+  XSync(dpy, False);
+  return 0;
+}
 
 static int has_dock_type(Display *dpy, Window win, Atom prop, Atom dock)
 {
@@ -107,9 +179,16 @@ int main(int argc, char **argv)
     rc = print_dock(dpy, RootWindow(dpy, DefaultScreen(dpy)));
   else if (argc == 2 && !strcmp(argv[1], "toggle"))
     rc = toggle(dpy);
+  else if (argc == 2 && !strcmp(argv[1], "hold"))
+    rc = hold_surface(dpy);
+  else if (argc == 2 && !strcmp(argv[1], "touch-rawm"))
+    rc = touch_rawm_state(dpy);
   else if (argc == 3 && !strcmp(argv[1], "supported"))
     rc = supported(dpy, argv[2]);
-  else
+  else if (argc == 4 && !strcmp(argv[1], "above")) {
+    Window lower = parse_window(argv[2]), upper = parse_window(argv[3]);
+    rc = lower && upper && window_above(dpy, lower, upper) ? 0 : 1;
+  } else
     rc = 2;
   XCloseDisplay(dpy); return rc;
 }
