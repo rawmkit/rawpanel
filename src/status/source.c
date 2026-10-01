@@ -448,13 +448,9 @@ sample_alsa(RawpanelStatusSource *source, char **text, RawpanelStatusState *stat
             FILE *err)
 {
   char buffer[64];
-  RawpanelStatusAlsa *alsa = source->provider_data;
-  int rc;
 
-  rc = rawpanel_status_alsa_sample(&alsa, source->config, buffer, sizeof(buffer),
-                               state, err);
-  source->provider_data = alsa;
-  if (rc < 0)
+  if (rawpanel_status_alsa_sample(source->config, buffer, sizeof(buffer),
+                                  state, err) < 0)
     return -1;
   return set_sample(text, state, buffer, *state);
 }
@@ -617,11 +613,6 @@ rawpanel_status_source_destroy(RawpanelStatusSource *source)
 {
   free(source->text);
   free(source->network_interface);
-  if (source->config && source->config->provider == RAWPANEL_STATUS_PROVIDER_ALSA) {
-    RawpanelStatusAlsa *alsa = source->provider_data;
-
-    rawpanel_status_alsa_destroy(&alsa);
-  }
   memset(source, 0, sizeof(*source));
 }
 
@@ -660,10 +651,7 @@ rawpanel_status_source_refresh(RawpanelStatusSource *source, uint64_t now_ms,
     break;
   }
 
-  if (source->config->provider == RAWPANEL_STATUS_PROVIDER_ALSA && rc == 0)
-    source->next_due_ms = UINT64_MAX;
-  else
-    source->next_due_ms = now_ms + source->config->period_ms;
+  source->next_due_ms = now_ms + source->config->period_ms;
   if (rc == 0) {
     free(source->text);
     source->text = text;
@@ -689,17 +677,14 @@ rawpanel_status_source_refresh(RawpanelStatusSource *source, uint64_t now_ms,
 
 int
 rawpanel_status_source_control(RawpanelStatusSource *source,
-                           RawpanelStatusControl control, uint64_t now_ms,
-                           const volatile sig_atomic_t *terminate, FILE *err)
+                               RawpanelStatusControl control, uint64_t now_ms,
+                               const volatile sig_atomic_t *terminate, FILE *err)
 {
-  RawpanelStatusAlsa *alsa;
   int changed = 0;
 
   if (!source || source->config->provider != RAWPANEL_STATUS_PROVIDER_ALSA)
     return -1;
-  alsa = source->provider_data;
-  if (rawpanel_status_alsa_control(&alsa, source->config, control, err) < 0) {
-    source->provider_data = alsa;
+  if (rawpanel_status_alsa_control(source->config, control, err) < 0) {
     source->next_due_ms = now_ms + source->config->period_ms;
     if (source->has_value && source->state != RAWPANEL_STATUS_STALE) {
       source->state = RAWPANEL_STATUS_STALE;
@@ -707,43 +692,5 @@ rawpanel_status_source_control(RawpanelStatusSource *source,
     }
     return changed;
   }
-  source->provider_data = alsa;
-  return rawpanel_status_source_refresh(source, now_ms, terminate, err);
-}
-
-size_t
-rawpanel_status_source_pollfd_count(RawpanelStatusSource *source)
-{
-  if (!source || source->config->provider != RAWPANEL_STATUS_PROVIDER_ALSA)
-    return 0;
-  return rawpanel_status_alsa_pollfd_count(source->provider_data);
-}
-
-int
-rawpanel_status_source_pollfds(RawpanelStatusSource *source, struct pollfd *pfds,
-                            size_t count)
-{
-  if (!source || source->config->provider != RAWPANEL_STATUS_PROVIDER_ALSA)
-    return count ? -1 : 0;
-  return rawpanel_status_alsa_pollfds(source->provider_data, pfds, count);
-}
-
-int
-rawpanel_status_source_handle_events(RawpanelStatusSource *source,
-                                 struct pollfd *pfds, size_t count,
-                                 uint64_t now_ms,
-                                 const volatile sig_atomic_t *terminate,
-                                 FILE *err)
-{
-  RawpanelStatusAlsa *alsa;
-  int rc;
-
-  if (!source || source->config->provider != RAWPANEL_STATUS_PROVIDER_ALSA)
-    return 0;
-  alsa = source->provider_data;
-  rc = rawpanel_status_alsa_handle_events(&alsa, pfds, count, err);
-  source->provider_data = alsa;
-  if (rc == 0)
-    return 0;
   return rawpanel_status_source_refresh(source, now_ms, terminate, err);
 }

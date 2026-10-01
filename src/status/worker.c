@@ -173,11 +173,6 @@ publish_snapshot(const RawpanelStatusSource *sources, size_t count, int fd,
   return rc;
 }
 
-typedef struct {
-  size_t offset;
-  size_t count;
-} RawpanelStatusPollSlice;
-
 static int
 handle_control(RawpanelStatusSource *sources, size_t source_count, int fd,
                bool *publish, FILE *err)
@@ -232,125 +227,29 @@ static int
 wait_for_events(RawpanelStatusSource *sources, size_t source_count, int fd,
                 FILE *out, int timeout, bool *publish, FILE *err)
 {
-  RawpanelStatusPollSlice *slices = NULL;
-  struct pollfd *pfds = NULL;
-  size_t base = out ? 0u : 1u;
-  size_t total = base;
-  size_t i;
+  struct pollfd pfd = { .fd = -1, .events = 0 };
+  nfds_t count = 0;
   int rc;
 
-  if (source_count) {
-    slices = calloc(source_count, sizeof(*slices));
-    if (!slices) {
-      fputs("rawpanel: status worker: out of memory\n", err);
-      return -1;
-    }
-  }
-  for (i = 0; i < source_count; ++i) {
-    size_t count;
-
-    if (!sources[i].config->enabled)
-      continue;
-    count = rawpanel_status_source_pollfd_count(&sources[i]);
-    if (count > SIZE_MAX - total) {
-      fputs("rawpanel: status worker: too many source poll descriptors\n", err);
-      free(slices);
-      return -1;
-    }
-    slices[i].offset = total;
-    slices[i].count = count;
-    total += count;
-  }
-
-  if (total) {
-    pfds = calloc(total, sizeof(*pfds));
-    if (!pfds) {
-      fputs("rawpanel: status worker: out of memory\n", err);
-      free(slices);
-      return -1;
-    }
-    for (i = 0; i < total; ++i)
-      pfds[i].fd = -1;
-  }
   if (!out) {
-    pfds[0].fd = fd;
-    pfds[0].events = POLLIN | POLLHUP;
-  }
-  for (i = 0; i < source_count; ++i) {
-    if (!slices[i].count)
-      continue;
-    if (rawpanel_status_source_pollfds(&sources[i], &pfds[slices[i].offset],
-                                   slices[i].count) < 0) {
-      uint64_t now = monotonic_ms();
-
-      slices[i].count = 0;
-      if (now)
-        sources[i].next_due_ms = now + sources[i].config->period_ms;
-      if (timeout < 0 || (int)sources[i].config->period_ms < timeout)
-        timeout = (int)sources[i].config->period_ms;
-    }
+    pfd.fd = fd;
+    pfd.events = POLLIN | POLLHUP;
+    count = 1;
   }
 
-  rc = poll(pfds, total, timeout);
+  rc = poll(count ? &pfd : NULL, count, timeout);
   if (rc < 0) {
     if (errno != EINTR)
       fprintf(err, "rawpanel: status worker: poll: %s\n", strerror(errno));
-    free(pfds);
-    free(slices);
     return errno == EINTR ? 0 : -1;
   }
-  if (rc == 0) {
-    free(pfds);
-    free(slices);
+  if (rc == 0 || out)
     return 0;
-  }
 
-  if (!out) {
-    if (pfds[0].revents & (POLLHUP | POLLERR | POLLNVAL)) {
-      free(pfds);
-      free(slices);
-      return 1;
-    }
-    if (pfds[0].revents & POLLIN) {
-      int control_result = handle_control(sources, source_count, fd, publish, err);
-
-      if (control_result != 0) {
-        free(pfds);
-        free(slices);
-        return control_result;
-      }
-    }
-  }
-
-  for (i = 0; i < source_count; ++i) {
-    bool ready = false;
-    size_t j;
-    int changed;
-    uint64_t now;
-
-    for (j = 0; j < slices[i].count; ++j) {
-      if (pfds[slices[i].offset + j].revents) {
-        ready = true;
-        break;
-      }
-    }
-    if (!ready)
-      continue;
-    now = monotonic_ms();
-    if (!now) {
-      free(pfds);
-      free(slices);
-      return -1;
-    }
-    changed = rawpanel_status_source_handle_events(
-      &sources[i], &pfds[slices[i].offset], slices[i].count, now,
-      &terminate_requested, err);
-    if (changed > 0)
-      *publish = true;
-  }
-
-  free(pfds);
-  free(slices);
+  if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))
+    return 1;
+  if (pfd.revents & POLLIN)
+    return handle_control(sources, source_count, fd, publish, err);
   return 0;
 }
 

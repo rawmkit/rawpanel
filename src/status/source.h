@@ -6,7 +6,6 @@
 #include "control.h"
 #include "status.h"
 
-#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -24,7 +23,6 @@ typedef struct {
   uint64_t network_rx;
   uint64_t network_tx;
   uint64_t network_time_ms;
-  void *provider_data;
   uint64_t next_due_ms;
 } RawpanelStatusSource;
 
@@ -36,13 +34,4 @@ int rawpanel_status_source_refresh(RawpanelStatusSource *source, uint64_t now_ms
 int rawpanel_status_source_control(RawpanelStatusSource *source,
                                RawpanelStatusControl control, uint64_t now_ms,
                                const volatile sig_atomic_t *terminate, FILE *err);
-size_t rawpanel_status_source_pollfd_count(RawpanelStatusSource *source);
-int rawpanel_status_source_pollfds(RawpanelStatusSource *source, struct pollfd *pfds,
-                               size_t count);
-int rawpanel_status_source_handle_events(RawpanelStatusSource *source,
-                                     struct pollfd *pfds, size_t count,
-                                     uint64_t now_ms,
-                                     const volatile sig_atomic_t *terminate,
-                                     FILE *err);
-
 #endif
