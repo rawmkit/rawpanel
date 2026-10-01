@@ -26,6 +26,14 @@ errors.
 *bottom*), *height*, *padding*, *item\_spacing*, *section\_spacing*,
 *cell\_margin*, *indicator\_size*, *tags* (*occupied* or *all*), and *colors*.
 
+*font* is a Fontconfig/Xft pattern. The matched face is the primary panel font.
+When it lacks a Unicode character, rawpanel asks Fontconfig for a scalable
+monochrome fallback face, caches it, and vertically centers that face inside the
+same panel text line. Color-font fallback is intentionally excluded because Xft
+cannot reliably rasterize every color-font format, including COLR v1. Install a
+monochrome outline font covering the desired characters when the primary face
+does not provide them.
+
 *colors* contains the groups *normal*, *selected*, *floating*, *urgent*, and
 *error*. Each color group accepts *border*, *foreground*, and *background*.
 

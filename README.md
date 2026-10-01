@@ -52,6 +52,11 @@ The schema is fail-closed: unknown settings, wrong types, and malformed button
 or status policy are configuration errors rather than ignored compatibility
 state.
 
+Panel text uses the configured Xft face as its primary font and resolves missing
+Unicode glyphs through bounded Fontconfig fallback. Fallback is restricted to
+scalable monochrome outline faces so title, tag, and status rendering stays on
+Xft's dependable rasterization path.
+
 ## Build
 
 ```sh

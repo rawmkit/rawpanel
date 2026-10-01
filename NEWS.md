@@ -1,6 +1,7 @@
 # NEWS
 
 ## 0.1.0
+- Restore scalable monochrome Fontconfig fallback for Unicode glyphs absent from the configured primary Xft face; mixed-font runs are measured consistently and centered within the panel line.
 - Stop passive rawm state reconciliation from raising an already mapped panel across fullscreen or other higher surfaces; state refresh now preserves existing root stacking.
 - Preserve peer-owned XEmbed windows across abrupt panel loss with the X save-set, and contain disappearing-client X errors instead of terminating the panel.
 - Clip text rendering to each allocated panel cell so long window titles cannot draw across status or tray surfaces.
