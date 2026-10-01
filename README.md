@@ -36,8 +36,11 @@ For independent input routers, rawpanel owns `_RAWPANEL_CONTROL_Sn` while alive
 and publishes `_RAWPANEL_SUPPORTED_COMMANDS`. Visibility is always advertised.
 Native volume commands are advertised only while a live status worker has one
 unambiguous enabled ALSA source; rawpanel withdraws them if that worker is lost.
-Selection ownership is the liveness boundary; no socket, PID file, or stale root
-property is used.
+ALSA mixer access is transactional: sampling and native volume commands open the
+configured mixer only for the duration of the operation, so the panel does not
+retain a sound-card control handle between refreshes. External mixer changes are
+picked up on the configured status period. Selection ownership is the liveness
+boundary; no socket, PID file, or stale root property is used.
 
 ## Configuration
 

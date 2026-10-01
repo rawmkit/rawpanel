@@ -47,6 +47,12 @@ does not provide them.
 use the native providers *alsa*, *battery*, *clock*, *cpu*, *exec*,
 *filesystem*, *memory*, and *network*.
 
+The *alsa* provider opens the configured mixer only while sampling or applying a
+volume command, then closes it immediately. It does not retain an ALSA control
+handle for event monitoring. External mixer changes are therefore observed on
+the source's *period_ms* refresh cadence; native volume commands still refresh
+the source immediately after the command completes.
+
 # BUTTONS
 
 *buttons* is a list of groups with *target*, *button*, *action*, and optional

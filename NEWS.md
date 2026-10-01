@@ -13,5 +13,7 @@
 - Consume rawm authoritative monitor/tag/layout/stack state.
 - Reserve work area through EWMH dock struts.
 - Move native status acquisition and ALSA control into the panel authority.
+- Keep ALSA mixer ownership transactional: open the configured control only while sampling or applying a volume command, then close it before returning.
+- Refresh ALSA status on its configured period instead of retaining mixer event descriptors for the panel lifetime.
 - Own XEmbed system-tray selection independently from rawm.
 - Expose a small selection-based panel control membrane.
