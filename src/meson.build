@@ -2,6 +2,7 @@ rawpanel_sources = files(
   'main.c',
   'config.c',
   'rawm.c',
+  'text.c',
   'status/status.c',
   'status/config.c',
   'status/alsa.c',

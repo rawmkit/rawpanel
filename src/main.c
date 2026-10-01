@@ -4,6 +4,7 @@
 #include "config.h"
 #include "rawm.h"
 #include "status/worker.h"
+#include "text.h"
 
 #include <X11/Xatom.h>
 #include <X11/Xft/Xft.h>
@@ -86,7 +87,7 @@ static Atom net_wm_name, net_wm_type, net_wm_type_dock;
 static Atom net_wm_strut, net_wm_strut_partial;
 static Atom utf8;
 static GC gc;
-static XftFont *font;
+static RawpanelText text_renderer;
 static XftColor colors[RAWPANEL_SCHEME_COUNT][RAWPANEL_COLOR_COUNT];
 static RawpanelConfig cfg;
 static RawpanelRawm rawm;
@@ -141,19 +142,12 @@ static void die(const char *msg)
 
 static int text_width(const char *text)
 {
-  XGlyphInfo ext;
-  if (!text || !*text)
-    return 0;
-  XftTextExtentsUtf8(dpy, font, (const FcChar8 *)text, (int)strlen(text), &ext);
-  return (int)ext.xOff;
+  return rawpanel_text_width(&text_renderer, text);
 }
 
 static int text_width_n(const char *text, size_t len)
 {
-  XGlyphInfo ext;
-  if (!text || !len) return 0;
-  XftTextExtentsUtf8(dpy, font, (const FcChar8 *)text, (int)len, &ext);
-  return (int)ext.xOff;
+  return rawpanel_text_width_n(&text_renderer, text, len);
 }
 
 static size_t utf8_char_len(const char *text, size_t remaining)
@@ -217,12 +211,9 @@ static void fill(Pixmap pix, int x, int y, int w, int h, RawpanelScheme scheme)
 static void draw_text_at(Panel *p, int x, const char *text,
                          RawpanelScheme scheme)
 {
-  int ascent = font->ascent;
-  int descent = font->descent;
-  int baseline = (p->h - (ascent + descent)) / 2 + ascent;
-
-  XftDrawStringUtf8(p->draw, scheme_color(scheme, RAWPANEL_COLOR_FOREGROUND),
-                    font, x, baseline, (const FcChar8 *)text, (int)strlen(text));
+  rawpanel_text_draw(&text_renderer, p->draw,
+                     scheme_color(scheme, RAWPANEL_COLOR_FOREGROUND),
+                     x, 0, p->h, text, strlen(text));
 }
 
 static int draw_text(Panel *p, int x, int width, const char *text,
@@ -1091,8 +1082,8 @@ static int init_x(void)
   net_wm_strut = XInternAtom(dpy, "_NET_WM_STRUT", False);
   net_wm_strut_partial = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
   gc = XCreateGC(dpy, root, 0, NULL);
-  font = XftFontOpenName(dpy, screen_no, cfg.font);
-  if (!gc || !font) return -1;
+  if (!gc || rawpanel_text_init(&text_renderer, dpy, screen_no, cfg.font) < 0)
+    return -1;
   for (i = 0; i < RAWPANEL_SCHEME_COUNT; ++i)
     for (j = 0; j < RAWPANEL_COLOR_COUNT; ++j)
       if (!XftColorAllocName(dpy, DefaultVisual(dpy, screen_no),
@@ -1114,7 +1105,7 @@ static void cleanup(void)
   if (dpy && control_owner) XDestroyWindow(dpy, control_owner);
   control_owner = None;
   if (dpy) {
-    if (font) XftFontClose(dpy, font);
+    rawpanel_text_destroy(&text_renderer);
     for (i = 0; i < RAWPANEL_SCHEME_COUNT; ++i)
       for (j = 0; j < RAWPANEL_COLOR_COUNT; ++j)
         if (colors[i][j].pixel) XftColorFree(dpy, DefaultVisual(dpy, screen_no),
