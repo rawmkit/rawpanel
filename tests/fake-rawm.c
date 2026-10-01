@@ -30,12 +30,14 @@ int main(void)
     "rawm-state-v2\n"
     "tag-count\t3\n"
     "selected-monitor\t0\n"
-    "monitor\t0\t1\t0\t0\t800\t600\t0\t0\t800\t600\t00000001\t00000003\t00000000\ttile\t0x0\t1\t0.500000\n"
+    "monitor\t0\t1\t0\t0\t800\t600\t0\t0\t800\t600\t00000001\t00000003\t00000000\ttile\t0x101\t1\t0.500000\n"
     "stack\t0\t0\t0\n"
     "tag\t0\t1\tone\n"
     "tag\t0\t2\ttwo\n"
     "tag\t0\t3\tthree\n";
-  const char clients[] = "rawm-clients-v1\n";
+  const char clients[] =
+    "rawm-clients-v1\n"
+    "client\t0x101\t0\t00000001\t1\t1\tBrowser\t%E2%9A%A1 Unicode title\n";
 
   if (!dpy) return 77;
   screen = DefaultScreen(dpy);

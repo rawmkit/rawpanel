@@ -77,7 +77,7 @@ main(void)
     "tag\t0\t2\ttwo\n";
   static const char clients[] =
     "rawm-clients-v1\n"
-    "client\t0x101\t0\t00000001\t1\t1\tAlphaClass\tAlpha%25desk\n"
+    "client\t0x101\t0\t00000001\t1\t1\tAlphaClass\t%E2%9A%A1 Alpha%25desk\n"
     "client\t0x202\t0\t00000002\t0\t0\tBetaClass\tBeta desk\n";
   static const char *const supported[] = { "_RAWM_CMD_VIEW" };
   Display *dpy = XOpenDisplay(NULL);
@@ -111,7 +111,7 @@ main(void)
     fail("valid state was rejected");
   if (parsed.monitor_count != 1 || parsed.tag_count != 2 ||
       strcmp(parsed.monitors[0].layout, "tile") ||
-      strcmp(parsed.monitors[0].title, "Alpha%desk"))
+      strcmp(parsed.monitors[0].title, "\xe2\x9a\xa1 Alpha%desk"))
     fail("valid state decoded incorrectly");
 
   set_utf8(dpy, owner, "_RAWM_STATE",
