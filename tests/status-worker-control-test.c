@@ -51,7 +51,6 @@ main(void)
   RawpanelStatusWorker worker;
 
   rawpanel_test_alsa_reset();
-  rawpanel_test_alsa_set_poll_count(0);
 
   rawpanel_status_worker_init(&worker);
   if (rawpanel_status_worker_start(&worker, &config, stderr) < 0)

@@ -21,8 +21,10 @@ static struct _snd_mixer_elem element;
 static long left_volume;
 static long right_volume;
 static int muted;
-static int handled_events;
-static int poll_count;
+static int mixer_open;
+static unsigned int open_count;
+static unsigned int close_count;
+static int attach_failure;
 
 void
 rawpanel_test_alsa_reset(void)
@@ -30,14 +32,16 @@ rawpanel_test_alsa_reset(void)
   left_volume = 50;
   right_volume = 100;
   muted = 0;
-  handled_events = 0;
-  poll_count = 1;
+  mixer_open = 0;
+  open_count = 0;
+  close_count = 0;
+  attach_failure = 0;
 }
 
 void
-rawpanel_test_alsa_set_poll_count(int count)
+rawpanel_test_alsa_set_attach_failure(int enabled)
 {
-  poll_count = count;
+  attach_failure = enabled != 0;
 }
 
 long
@@ -59,15 +63,31 @@ rawpanel_test_alsa_muted(void)
 }
 
 int
-rawpanel_test_alsa_handled_events(void)
+rawpanel_test_alsa_mixer_open(void)
 {
-  return handled_events;
+  return mixer_open;
+}
+
+unsigned int
+rawpanel_test_alsa_open_count(void)
+{
+  return open_count;
+}
+
+unsigned int
+rawpanel_test_alsa_close_count(void)
+{
+  return close_count;
 }
 
 int
 snd_mixer_open(snd_mixer_t **out, int mode)
 {
   (void)mode;
+  if (mixer_open)
+    return -1;
+  mixer_open = 1;
+  ++open_count;
   *out = &mixer;
   return 0;
 }
@@ -75,7 +95,10 @@ snd_mixer_open(snd_mixer_t **out, int mode)
 int
 snd_mixer_close(snd_mixer_t *handle)
 {
-  (void)handle;
+  if (handle != &mixer || !mixer_open)
+    return -1;
+  mixer_open = 0;
+  ++close_count;
   return 0;
 }
 
@@ -83,6 +106,8 @@ int
 snd_mixer_attach(snd_mixer_t *handle, const char *name)
 {
   (void)handle;
+  if (attach_failure)
+    return -1;
   return strcmp(name, "default") ? -1 : 0;
 }
 
@@ -225,47 +250,6 @@ snd_mixer_selem_set_playback_switch(snd_mixer_elem_t *elem,
       channel != SND_MIXER_SCHN_FRONT_RIGHT)
     return -1;
   muted = !value;
-  return 0;
-}
-
-int
-snd_mixer_poll_descriptors_count(snd_mixer_t *handle)
-{
-  (void)handle;
-  return poll_count;
-}
-
-int
-snd_mixer_poll_descriptors(snd_mixer_t *handle, struct pollfd *pfds,
-                           unsigned int count)
-{
-  (void)handle;
-  if (poll_count <= 0)
-    return 0;
-  if (count != (unsigned int)poll_count)
-    return -1;
-  pfds[0].fd = 7;
-  pfds[0].events = POLLIN;
-  return poll_count;
-}
-
-int
-snd_mixer_poll_descriptors_revents(snd_mixer_t *handle, struct pollfd *pfds,
-                                   unsigned int count,
-                                   unsigned short *revents)
-{
-  (void)handle;
-  if (poll_count <= 0 || count != (unsigned int)poll_count)
-    return -1;
-  *revents = pfds[0].revents;
-  return 0;
-}
-
-int
-snd_mixer_handle_events(snd_mixer_t *handle)
-{
-  (void)handle;
-  ++handled_events;
   return 0;
 }
 

@@ -18,6 +18,18 @@ alsa_test = executable(
 )
 test('status-alsa', alsa_test)
 
+alsa_source_test = executable(
+  'status-source-alsa-test',
+  'status-source-alsa-test.c',
+  'status-alsa-fake.c',
+  '../src/status/status.c',
+  '../src/status/alsa.c',
+  '../src/status/source.c',
+  include_directories: status_inc,
+  dependencies: [alsa_dep],
+)
+test('status-source-alsa', alsa_source_test)
+
 worker_test = executable(
   'status-worker-control-test',
   'status-worker-control-test.c',
